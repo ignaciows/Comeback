@@ -18,6 +18,8 @@ import {
   volumeByMuscleGroup,
 } from '@/domain/training/metrics';
 import type { MuscleGroup } from '@/domain/types';
+import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
+import { STRATEGIES } from '@/domain/plan/strategies';
 import { useBodyWeightSeries, useCompletedSessions, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 import { addDays, daysBetween, formatLongDate, formatShortDate, lastNDays, today as todayOf } from '@/utils/date';
@@ -119,6 +121,27 @@ export default function ProgressScreen() {
       <Text variant="title" style={styles.title}>
         Progress
       </Text>
+
+      {engine.projection && goal ? (
+        <Section
+          title="Plan"
+          action={{ label: 'Change', onPress: () => router.push('/plan') }}
+          footnote={engine.projection.explanation}
+        >
+          <MilestoneTrack
+            completed={engine.projection.sessionsCompleted}
+            remaining={engine.projection.sessionsRemaining}
+            targetLabel={
+              goal.targetWeightKg ? `${goal.targetWeightKg.toFixed(1)} kg` : STRATEGIES[goal.strategy].label
+            }
+            footnote={
+              engine.projection.targetDate
+                ? `${STRATEGIES[goal.strategy].label} · estimated ${formatLongDate(engine.projection.targetDate)}`
+                : STRATEGIES[goal.strategy].label
+            }
+          />
+        </Section>
+      ) : null}
 
       <Section title="Momentum" action={{ label: 'Details', onPress: () => router.push('/momentum') }}>
         {engine.momentum ? (

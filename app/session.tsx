@@ -1,4 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -10,10 +11,12 @@ import { Header } from '@/components/Header';
 import { Input } from '@/components/Input';
 import { Screen } from '@/components/Screen';
 import { Divider, Section } from '@/components/Section';
+import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { colors, opacity, spacing } from '@/design-system/tokens';
 import { EXERCISES, exerciseName, findSubstitutions, getExercise, searchExercises } from '@/data/exercises';
 import type { WorkoutExercise } from '@/domain/types';
+import { FormGuideSheet } from '@/features/training/FormGuide';
 import { formatPreviousSet, previousPerformance } from '@/features/training/history';
 import { RestTimer } from '@/features/training/RestTimer';
 import { SetRow } from '@/features/training/SetRow';
@@ -51,6 +54,7 @@ export default function SessionScreen() {
   const [restStartedAt, setRestStartedAt] = useState<number | null>(null);
   const [restDuration, setRestDuration] = useState(defaultRestSeconds);
   const [substituting, setSubstituting] = useState<WorkoutExercise | null>(null);
+  const [guiding, setGuiding] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [query, setQuery] = useState('');
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -110,6 +114,9 @@ export default function SessionScreen() {
       : { completed: false };
 
     updateSet(session.id, exercise.id, setId, patch);
+    Haptics.impactAsync(
+      nextCompleted ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light,
+    );
 
     if (nextCompleted && !set.warmup) {
       setRestDuration(defaultRestSeconds);
@@ -160,8 +167,16 @@ export default function SessionScreen() {
         return (
           <Section key={exercise.id}>
             <View style={styles.exerciseHead}>
-              <View style={styles.exerciseTitle}>
-                <Text variant="heading">{exerciseName(exercise.exerciseId)}</Text>
+              <Pressable
+                onPress={() => setGuiding(exercise.exerciseId)}
+                accessibilityRole="button"
+                accessibilityLabel={`How to do ${exerciseName(exercise.exerciseId)}`}
+                style={styles.exerciseTitle}
+              >
+                <View style={styles.exerciseTitleRow}>
+                  <Text variant="heading">{exerciseName(exercise.exerciseId)}</Text>
+                  <Icon name="info" size={14} color={colors.textTertiary} />
+                </View>
                 <Text variant="caption" tone="tertiary">
                   {previous
                     ? `Last time ${formatShortDate(previous.date)} · ${previous.sets.length} sets`
@@ -172,7 +187,7 @@ export default function SessionScreen() {
                     {`Replaced ${exerciseName(exercise.substitutedFrom)}`}
                   </Text>
                 ) : null}
-              </View>
+              </Pressable>
               {!readOnly ? (
                 <View style={styles.exerciseActions}>
                   <IconButton
@@ -352,6 +367,8 @@ export default function SessionScreen() {
         </View>
       </BottomSheet>
 
+      <FormGuideSheet exerciseId={guiding} onClose={() => setGuiding(null)} />
+
       <ConfirmationSheet
         visible={confirmFinish}
         onClose={() => setConfirmFinish(false)}
@@ -390,6 +407,11 @@ const styles = StyleSheet.create({
   exerciseTitle: {
     flex: 1,
     gap: 2,
+  },
+  exerciseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   exerciseActions: {
     flexDirection: 'row',

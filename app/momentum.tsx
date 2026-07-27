@@ -13,7 +13,7 @@ import { colors, spacing } from '@/design-system/tokens';
 import { momentumConfig } from '@/domain/config';
 import { momentumStateLabel } from '@/domain/momentum/calculateMomentum';
 import type { MomentumComponents } from '@/domain/types';
-import { MomentumIndicator } from '@/features/momentum/MomentumIndicator';
+import { MomentumRing } from '@/features/momentum/MomentumRing';
 import { useEngine } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
 
@@ -65,13 +65,34 @@ export default function MomentumScreen() {
       />
 
       <Section>
-        <MomentumIndicator
+        <MomentumRing
           score={momentum.score}
-          state={momentum.state}
-          delta={engine.momentumDelta7}
-          confidence={momentum.confidence}
-          explanation={momentum.explanation}
+          color={
+            momentum.state === 'at_risk'
+              ? colors.warning
+              : momentum.state === 'declining'
+                ? colors.danger
+                : momentum.state === 'recovering'
+                  ? colors.info
+                  : momentum.state === 'stable'
+                    ? colors.textSecondary
+                    : colors.accent
+          }
+          label={momentumStateLabel(momentum.state)}
         />
+        <Text variant="bodySmall" tone="secondary" style={styles.explanation}>
+          {momentum.explanation}
+        </Text>
+        <View style={styles.summaryRow}>
+          <Text variant="caption" tone="tertiary">
+            {`${momentum.confidence} confidence`}
+          </Text>
+          <Text variant="caption" tone="tertiary" mono>
+            {engine.momentumDelta7 === null
+              ? 'No 7-day trend yet'
+              : `${engine.momentumDelta7 > 0 ? '+' : ''}${engine.momentumDelta7} over 7 days`}
+          </Text>
+        </View>
       </Section>
 
       <Section title="History" footnote="One point per day since your first logged data.">
@@ -181,6 +202,14 @@ export default function MomentumScreen() {
 }
 
 const styles = StyleSheet.create({
+  explanation: {
+    marginTop: spacing.xl,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
   component: {
     marginBottom: spacing.xl,
   },

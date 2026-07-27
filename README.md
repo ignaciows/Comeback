@@ -54,12 +54,14 @@ eas build --platform ios --profile preview   # requires an Apple Developer accou
 
 ## The first run
 
-1. Complete the five-step onboarding (goal → starting point → availability →
-   how you feel → your first plan).
-2. Land on **Today**: momentum, today's recommendation, readiness.
-3. Log a check-in, start the recommended session, log sets, finish.
-4. Momentum updates and explains why.
-5. Log body weight, review the session in **Progress**.
+1. Four inputs: goal, body weight, height, days per week. Everything else
+   starts on a defensible default and is editable in Profile.
+2. See your plan: routine, target date, sessions to get there, calories and
+   protein.
+3. Land on **Today**: momentum, today's recommendation, readiness.
+4. Log a check-in, start the recommended session, log sets, finish.
+5. Momentum updates and explains why.
+6. Log body weight; **Plan** reprojects from your real rate.
 
 To see the models working with history behind them, use **Profile → Load sample
 history**. It writes the starting profile plus four weeks of generated sessions
@@ -77,6 +79,11 @@ you logged yourself.
 | Momentum with per-day explanations and history | done |
 | Comeback Progress against a measured baseline | done |
 | Progress: consistency, volume, per-exercise 1RM trend, body weight, target date | done |
+| Plan strategies (cut → bulk) switchable at any time, with the cost in days | done |
+| Target date, milestones, session track, calorie and protein targets | done |
+| Per-exercise technique: setup, execution, cues, common mistakes | done |
+| Method screen: the findings behind the plans, with sources | done |
+| Motion system: live momentum ring, heartbeat, time-of-day ambient | done |
 | Routine editing, gym equipment inventory, history, corrections | done |
 | Local persistence | done |
 | Supabase + auth, Apple Health / Watch, Renpho, notifications | not started (ports in place) |
@@ -100,6 +107,13 @@ motivation, compared against your rolling baseline.
 
 **Daily recommendation** — a transparent rule engine. One outcome, the factors
 it weighed, a written reason and a confidence level.
+
+**Plan projection** — where the current strategy leads: target date, sessions
+remaining, the lean/fat split of the projected change, and a muscle-gain ceiling
+set by training age. Rates come from the applied literature and are blended with
+the rate your own scale shows, so the projection converges on reality. Switching
+strategy recomputes everything from the progress you already have — nothing
+resets. See `src/data/trainingPrinciples.ts` for the sources.
 
 Every model reports `low | medium | high` confidence and refuses to produce a
 number when the data does not support one.
@@ -134,8 +148,20 @@ policies and indices, ready to apply when the project is provisioned.
 
 Dark, quiet, information-first. One accent colour, semantic colours used
 sparingly, separation through space and typography rather than nested cards. No
-gradients, no motivational copy, no emoji. See `src/design-system/tokens.ts` —
-nothing outside that file hardcodes a colour, radius or spacing value.
+motivational copy, no emoji. See `src/design-system/tokens.ts` — nothing outside
+that file hardcodes a colour, radius or spacing value.
+
+### Motion
+
+The app should read as something that is running, not a page that was printed.
+`src/design-system/motion.ts` defines one heartbeat that everything ambient
+reads from, so the screen breathes in phase instead of drifting: the momentum
+ring draws itself and sweeps continuously, live dots pulse where a value is
+being kept current, numbers count to their new value rather than snapping,
+sections land in a stagger, buttons settle under the finger, and a single
+time-of-day glow sits behind the content. Amplitudes are small by design
+(≤6 % scale, ≤0.25 alpha) and every loop stops when the system asks for reduced
+motion.
 
 ## Privacy
 

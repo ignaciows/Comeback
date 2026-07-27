@@ -12,6 +12,7 @@ import { Text } from '@/design-system/Text';
 import { spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
+import { FormGuideContent } from '@/features/training/FormGuide';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
 
@@ -66,6 +67,12 @@ export default function ExerciseDetailScreen() {
         }
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
       />
+
+      {meta ? (
+        <Section title="How to do it">
+          <FormGuideContent exerciseId={id} />
+        </Section>
+      ) : null}
 
       {entries.length === 0 ? (
         <EmptyState

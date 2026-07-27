@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AmbientBackground } from '@/components/AmbientBackground';
 import { colors, layout, spacing } from '@/design-system/tokens';
 
 type Props = {
@@ -11,6 +12,8 @@ type Props = {
   /** Extra bottom padding, e.g. to clear a docked action. */
   bottomInset?: number;
   padded?: boolean;
+  /** Renders the time-of-day glow behind the content. */
+  ambient?: boolean;
   style?: ViewStyle;
 };
 
@@ -18,7 +21,14 @@ type Props = {
  * Page shell: background, safe areas and horizontal rhythm. Every route renders
  * inside one of these.
  */
-export function Screen({ children, scroll = true, bottomInset = 0, padded = true, style }: Props) {
+export function Screen({
+  children,
+  scroll = true,
+  bottomInset = 0,
+  padded = true,
+  ambient = false,
+  style,
+}: Props) {
   const insets = useSafeAreaInsets();
   const paddingTop = insets.top + spacing.sm;
   const paddingBottom = insets.bottom + spacing.xl + bottomInset;
@@ -26,19 +36,25 @@ export function Screen({ children, scroll = true, bottomInset = 0, padded = true
 
   if (!scroll) {
     return (
-      <View style={[styles.root, { paddingTop, paddingHorizontal: horizontal }, style]}>{children}</View>
+      <View style={[styles.root, { paddingTop, paddingHorizontal: horizontal }, style]}>
+        {ambient ? <AmbientBackground /> : null}
+        {children}
+      </View>
     );
   }
 
   return (
-    <ScrollView
-      style={styles.root}
-      contentContainerStyle={[{ paddingTop, paddingBottom, paddingHorizontal: horizontal }, style]}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
-      {children}
-    </ScrollView>
+    <View style={styles.root}>
+      {ambient ? <AmbientBackground /> : null}
+      <ScrollView
+        style={styles.root}
+        contentContainerStyle={[{ paddingTop, paddingBottom, paddingHorizontal: horizontal }, style]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {children}
+      </ScrollView>
+    </View>
   );
 }
 

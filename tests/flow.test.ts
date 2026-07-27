@@ -193,6 +193,47 @@ describe('main flow', () => {
     }
   });
 
+  it('switches strategy without losing progress, and reprojects from where you are', () => {
+    useAppStore.getState().completeOnboarding(onboarding);
+
+    // Log a session and a weight so there is progress to carry over.
+    const sessionId = useAppStore.getState().startSession({ intent: 'free', name: 'Free session' });
+    useAppStore.getState().addExerciseToSession(sessionId, 'back_squat');
+    const exercise = useAppStore.getState().sessions.find((s) => s.id === sessionId)!.exercises[0];
+    useAppStore
+      .getState()
+      .updateSet(sessionId, exercise.id, exercise.sets[0].id, { weightKg: 100, reps: 5, completed: true });
+    useAppStore.getState().finishSession(sessionId);
+    useAppStore.getState().logBodyWeight(77.4);
+
+    const before = selectEngine(useAppStore.getState());
+    expect(before.projection).not.toBeNull();
+    expect(useAppStore.getState().goal?.strategy).toBe('lean_bulk');
+    expect(useAppStore.getState().phases).toHaveLength(1);
+
+    // The breakdown moment: switch to a cut with a lower target.
+    useAppStore.getState().changeStrategy('cut', { targetWeightKg: 72 });
+
+    const state = useAppStore.getState();
+    expect(state.goal?.strategy).toBe('cut');
+    expect(state.goal?.targetWeightKg).toBe(72);
+    // History is closed, not deleted.
+    expect(state.phases).toHaveLength(2);
+    expect(state.phases[0].endedAt).not.toBeNull();
+    expect(state.phases[0].endWeightKg).toBe(77.4);
+    expect(state.phases[1].endedAt).toBeNull();
+    // Sessions and weights survive the switch. Today's weight was updated in
+    // place rather than duplicated, so there is still one entry per day.
+    expect(state.sessions).toHaveLength(1);
+    expect(state.bodyMeasurements).toHaveLength(1);
+    expect(state.bodyMeasurements[0].weightKg).toBe(77.4);
+
+    const after = selectEngine(state);
+    expect(after.projection?.weeklyRateKg).toBeLessThan(0);
+    expect(after.projection?.sessionsCompleted).toBe(before.projection?.sessionsCompleted);
+    expect(after.projection?.targetDate).not.toBeNull();
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();

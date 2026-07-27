@@ -5,6 +5,7 @@ import { buildInitialRoutine, type PlanRequest } from '@/data/routineTemplates';
 import { getExercise } from '@/data/exercises';
 import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
+import { defaultStrategyFor } from '@/domain/plan/strategies';
 import type {
   BodyMeasurement,
   ComebackBaseline,
@@ -14,6 +15,8 @@ import type {
   Goal,
   Gym,
   ISODate,
+  NutritionStrategy,
+  PlanPhase,
   PlannedSession,
   Profile,
   Routine,
@@ -55,6 +58,7 @@ export type OnboardingPayload = {
   experience: Profile['experience'];
   layoffWeeks: number;
   goalType: Goal['type'];
+  strategy?: NutritionStrategy;
   targetWeightKg: number | null;
   horizonWeeks: number;
   daysPerWeek: number;
@@ -88,6 +92,8 @@ export type AppState = {
   checkins: DailyCheckin[];
   bodyMeasurements: BodyMeasurement[];
   comebackBaseline: ComebackBaseline | null;
+  /** Strategy history; never rewritten, only appended to. */
+  phases: PlanPhase[];
 };
 
 type Actions = {
@@ -139,6 +145,7 @@ type Actions = {
   skipPlannedSession: (plannedSessionId: string) => void;
   reschedulePlannedSession: (plannedSessionId: string, toDate: ISODate) => void;
 
+  changeStrategy: (strategy: NutritionStrategy, options?: { targetWeightKg?: number | null; note?: string | null }) => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
   resetAll: () => void;
@@ -164,6 +171,7 @@ const initialState: AppState = {
   checkins: [],
   bodyMeasurements: [],
   comebackBaseline: null,
+  phases: [],
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -231,17 +239,22 @@ export const useAppStore = create<Store>()(
 
         const profile: Profile = {
           id: createId(),
-          name: payload.name.trim() || 'Athlete',
+          name: payload.name.trim(),
           heightCm: payload.heightCm,
           experience: payload.experience,
           layoffWeeks: payload.layoffWeeks,
+          age: null,
+          sex: 'unspecified',
           createdAt: timestamp,
           updatedAt: timestamp,
         };
 
+        const strategy = payload.strategy ?? defaultStrategyFor(payload.goalType);
+
         const goal: Goal = {
           id: createId(),
           type: payload.goalType,
+          strategy,
           targetWeightKg: payload.targetWeightKg,
           proteinTargetG: null,
           horizonWeeks: payload.horizonWeeks,
@@ -279,9 +292,22 @@ export const useAppStore = create<Store>()(
               }
             : null;
 
+        const firstPhase: PlanPhase = {
+          id: createId(),
+          strategy,
+          startedAt: date,
+          endedAt: null,
+          startWeightKg: payload.weightKg,
+          endWeightKg: null,
+          targetWeightKg: payload.targetWeightKg,
+          note: null,
+          createdAt: timestamp,
+        };
+
         set({
           profile,
           goal,
+          phases: [firstPhase],
           training: { ...training, gymId: gym?.id ?? null },
           limitations: payload.limitations,
           routines: [routine],
@@ -298,21 +324,24 @@ export const useAppStore = create<Store>()(
               createdAt: timestamp,
             },
           ],
-          checkins: [
-            {
-              id: createId(),
-              date,
-              sleepHours: payload.checkin.sleepHours,
-              sleepQuality: payload.checkin.sleepQuality,
-              energy: payload.checkin.energy,
-              soreness: payload.checkin.soreness,
-              stress: payload.checkin.stress,
-              motivation: payload.checkin.motivation,
-              source: 'manual',
-              createdAt: timestamp,
-              updatedAt: timestamp,
-            },
-          ],
+          // Onboarding only writes a check-in if it actually collected one.
+          checkins: Object.values(payload.checkin).some((value) => value !== null)
+            ? [
+                {
+                  id: createId(),
+                  date,
+                  sleepHours: payload.checkin.sleepHours,
+                  sleepQuality: payload.checkin.sleepQuality,
+                  energy: payload.checkin.energy,
+                  soreness: payload.checkin.soreness,
+                  stress: payload.checkin.stress,
+                  motivation: payload.checkin.motivation,
+                  source: 'manual',
+                  createdAt: timestamp,
+                  updatedAt: timestamp,
+                },
+              ]
+            : [],
         });
 
         get().ensurePlan(date);
@@ -863,6 +892,48 @@ export const useAppStore = create<Store>()(
         track({ name: 'workout_rescheduled', days: daysBetween(source.date, toDate) });
       },
 
+      /**
+       * Switches eating strategy at any point. The running phase is closed at
+       * today's weight and a new one opens — nothing already logged is touched,
+       * so every projection continues from the progress already made rather
+       * than restarting.
+       */
+      changeStrategy: (strategy, options = {}) => {
+        const state = get();
+        const date = todayOf();
+        const timestamp = nowISO();
+        const latestWeight =
+          [...state.bodyMeasurements].sort((a, b) => (a.date < b.date ? -1 : 1)).pop()?.weightKg ?? null;
+
+        const targetWeightKg =
+          options.targetWeightKg === undefined ? state.goal?.targetWeightKg ?? null : options.targetWeightKg;
+
+        const phases: PlanPhase[] = state.phases.map((phase) =>
+          phase.endedAt === null
+            ? { ...phase, endedAt: date, endWeightKg: latestWeight }
+            : phase,
+        );
+
+        phases.push({
+          id: createId(),
+          strategy,
+          startedAt: date,
+          endedAt: null,
+          startWeightKg: latestWeight ?? 0,
+          endWeightKg: null,
+          targetWeightKg,
+          note: options.note ?? null,
+          createdAt: timestamp,
+        });
+
+        set({
+          phases,
+          goal: state.goal
+            ? { ...state.goal, strategy, targetWeightKg, updatedAt: timestamp }
+            : state.goal,
+        });
+      },
+
       persistBaseline: (baseline) => set({ comebackBaseline: baseline }),
 
       /**
@@ -1000,6 +1071,8 @@ export function selectEngine(state: AppState) {
     routines: state.routines,
     activeRoutineId: state.activeRoutineId,
     goal: state.goal,
+    profile: state.profile,
+    bodyMeasurements: state.bodyMeasurements,
     baseline: state.comebackBaseline,
     weekStartsOn: state.preferences.weekStartsOn,
   });

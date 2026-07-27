@@ -12,7 +12,8 @@ import { Divider, Section } from '@/components/Section';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/design-system/Text';
 import { spacing } from '@/design-system/tokens';
-import type { GoalType } from '@/domain/types';
+import { STRATEGIES } from '@/domain/plan/strategies';
+import type { BiologicalSex, GoalType } from '@/domain/types';
 import { PLANNED_HEALTH_SOURCES } from '@/services/health/HealthDataProvider';
 import { useBodyWeightSeries } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -80,6 +81,41 @@ export default function ProfileScreen() {
           value={latestWeight ? `${latestWeight.weightKg.toFixed(2)} kg` : 'Not logged'}
           detail="Logged from Progress or Today"
           onPress={() => router.push('/log-weight')}
+        />
+        <Divider />
+        <NumberInput
+          label="Age"
+          value={profile?.age ?? null}
+          onChange={(value) => updateProfile({ age: value })}
+          suffix="years"
+          precision={0}
+          hint="Only used for the calorie estimate; 30 is assumed when empty."
+          style={styles.fieldTop}
+        />
+        <SegmentedControl
+          label="Sex"
+          options={[
+            { value: 'male', label: 'Male' },
+            { value: 'female', label: 'Female' },
+            { value: 'unspecified', label: 'Not set' },
+          ]}
+          value={profile?.sex ?? 'unspecified'}
+          onChange={(value: BiologicalSex) => updateProfile({ sex: value })}
+          style={styles.field}
+        />
+      </Section>
+
+      <Section title="Plan">
+        <MetricRow
+          label={goal ? STRATEGIES[goal.strategy].label : 'No plan yet'}
+          detail="Change strategy, target and see what it costs in days"
+          onPress={() => router.push('/plan')}
+        />
+        <Divider />
+        <MetricRow
+          label="Method"
+          detail="The findings the plans are built from, and their sources"
+          onPress={() => router.push('/method')}
         />
       </Section>
 

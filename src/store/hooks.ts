@@ -17,6 +17,8 @@ export function useEngine(): EngineResult {
   const routines = useAppStore((state) => state.routines);
   const activeRoutineId = useAppStore((state) => state.activeRoutineId);
   const goal = useAppStore((state) => state.goal);
+  const profile = useAppStore((state) => state.profile);
+  const bodyMeasurements = useAppStore((state) => state.bodyMeasurements);
   const baseline = useAppStore((state) => state.comebackBaseline);
   const weekStartsOn = useAppStore((state) => state.preferences.weekStartsOn);
   const persistBaseline = useAppStore((state) => state.persistBaseline);
@@ -34,10 +36,25 @@ export function useEngine(): EngineResult {
         routines,
         activeRoutineId,
         goal,
+        profile,
+        bodyMeasurements,
         baseline,
         weekStartsOn,
       }),
-    [date, sessions, plannedSessions, checkins, training, routines, activeRoutineId, goal, baseline, weekStartsOn],
+    [
+      date,
+      sessions,
+      plannedSessions,
+      checkins,
+      training,
+      routines,
+      activeRoutineId,
+      goal,
+      profile,
+      bodyMeasurements,
+      baseline,
+      weekStartsOn,
+    ],
   );
 
   // The first observed baseline is written back once, so later comparisons are

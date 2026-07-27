@@ -23,6 +23,19 @@ export type GoalType =
   | 'maintain';
 
 export type ExperienceLevel = 'beginner' | 'returning' | 'intermediate' | 'advanced';
+export type BiologicalSex = 'male' | 'female' | 'unspecified';
+
+/**
+ * How the user is eating relative to maintenance. Defined here rather than in
+ * the plan module so entities can reference it without a circular import.
+ */
+export type NutritionStrategy =
+  | 'aggressive_cut'
+  | 'cut'
+  | 'lean_cut'
+  | 'maintain'
+  | 'lean_bulk'
+  | 'bulk';
 export type TrainingLocation = 'gym' | 'home';
 export type UnitSystem = 'metric' | 'imperial';
 
@@ -71,6 +84,9 @@ export interface Profile {
   experience: ExperienceLevel;
   /** Weeks away from training before starting Comeback. */
   layoffWeeks: number;
+  /** Only used for the calorie estimate; assumed when not set. */
+  age: number | null;
+  sex: BiologicalSex;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 }
@@ -78,6 +94,8 @@ export interface Profile {
 export interface Goal {
   id: UUID;
   type: GoalType;
+  /** Current eating strategy; drives every projection. */
+  strategy: NutritionStrategy;
   targetWeightKg: number | null;
   proteinTargetG: number | null;
   /** Horizon the user is working towards, in weeks. Drives the target date. */
@@ -154,6 +172,24 @@ export interface Routine {
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
   deletedAt: ISODateTime | null;
+}
+
+/**
+ * A stretch of the plan under one strategy. Switching strategy closes the
+ * current phase and opens a new one — nothing is deleted, so the history of
+ * "what I was doing when" survives every change of mind.
+ */
+export interface PlanPhase {
+  id: UUID;
+  strategy: NutritionStrategy;
+  startedAt: ISODate;
+  endedAt: ISODate | null;
+  startWeightKg: number;
+  endWeightKg: number | null;
+  targetWeightKg: number | null;
+  /** Why the user switched, in their words. */
+  note: string | null;
+  createdAt: ISODateTime;
 }
 
 export type PlannedSessionStatus =

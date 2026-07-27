@@ -119,6 +119,13 @@ considered, an explanation, and a confidence level.
 **Readiness (0–100)** — sleep, sleep quality, energy, soreness, stress,
 motivation, compared against the user's own rolling baseline.
 
+**Plan projection** — six nutrition strategies with rates taken from the applied
+literature, blended with the rate the user's own scale shows. Produces the
+target date, the sessions remaining, the lean/fat split of the projected change
+and a muscle-gain ceiling set by training age. Switching strategy closes the
+current phase and opens a new one: history is appended to, never rewritten, and
+every projection continues from the progress already made.
+
 ---
 
 ## 4. Phases
@@ -134,7 +141,8 @@ motivation, compared against the user's own rolling baseline.
 | 7 | Momentum: calculation, snapshots, factors, history, detail screen | done |
 | 8 | Progress: body weight, consistency, performance, Comeback Progress, target date | done |
 | 9 | Tests, empty states, error handling, docs | done |
-| next | Supabase + auth, Apple Health / Watch, Renpho, notifications, animations, i18n catalogue | not started |
+| 10 | Motion system, quick onboarding, plan strategies and projections, exercise technique, Method screen | done |
+| next | Supabase + auth, Apple Health / Watch, Renpho, notifications, i18n catalogue | not started |
 
 ---
 

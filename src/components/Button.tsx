@@ -1,8 +1,34 @@
+import * as Haptics from 'expo-haptics';
 import { ActivityIndicator, Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Icon, type IconName } from '@/design-system/Icon';
 import { Text } from '@/design-system/Text';
+import { motion } from '@/design-system/motion';
 import { borderWidth, colors, layout, opacity, radius, spacing } from '@/design-system/tokens';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/**
+ * Buttons settle under the finger rather than just changing opacity — the
+ * press is the app's most frequent interaction, so it is the one that most
+ * needs to feel physical.
+ */
+function usePressScale(amount = 0.97) {
+  const pressed = useSharedValue(0);
+  const style = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - pressed.value * (1 - amount) }],
+  }));
+  return {
+    style,
+    onPressIn: () => {
+      pressed.value = withTiming(1, { duration: motion.duration.instant });
+    },
+    onPressOut: () => {
+      pressed.value = withTiming(0, { duration: motion.duration.fast });
+    },
+  };
+}
 
 type BaseProps = {
   label: string;
@@ -26,18 +52,24 @@ export function PrimaryButton({
   block = true,
 }: BaseProps) {
   const inactive = disabled || loading;
+  const press = usePressScale();
   return (
-    <Pressable
-      onPress={onPress}
+    <AnimatedPressable
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       disabled={inactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
-      style={({ pressed }) => [
+      style={[
         styles.base,
         styles.primary,
         block && styles.block,
-        pressed && !inactive && { opacity: opacity.pressed },
         inactive && { opacity: opacity.disabled },
+        press.style,
         style,
       ]}
     >
@@ -51,7 +83,7 @@ export function PrimaryButton({
           </Text>
         </>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 
@@ -68,19 +100,25 @@ export function SecondaryButton({
 }: BaseProps & { tone?: 'neutral' | 'danger' }) {
   const inactive = disabled || loading;
   const color = tone === 'danger' ? colors.danger : colors.text;
+  const press = usePressScale();
   return (
-    <Pressable
-      onPress={onPress}
+    <AnimatedPressable
+      onPress={() => {
+        Haptics.selectionAsync();
+        onPress();
+      }}
+      onPressIn={press.onPressIn}
+      onPressOut={press.onPressOut}
       disabled={inactive}
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive }}
-      style={({ pressed }) => [
+      style={[
         styles.base,
         styles.secondary,
         tone === 'danger' && { borderColor: colors.dangerSurface },
         block && styles.block,
-        pressed && !inactive && { opacity: opacity.pressed },
         inactive && { opacity: opacity.disabled },
+        press.style,
         style,
       ]}
     >
@@ -94,7 +132,7 @@ export function SecondaryButton({
           </Text>
         </>
       )}
-    </Pressable>
+    </AnimatedPressable>
   );
 }
 

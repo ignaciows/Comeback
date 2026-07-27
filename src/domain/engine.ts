@@ -16,14 +16,18 @@ import {
   type RecommendationResult,
 } from './recommendations/generateDailyRecommendation';
 import { bestE1rmByExercise, sessionSetCount, sessionVolume } from './training/metrics';
+import { observedWeeklyRate } from './plan/observedRate';
+import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
 import type {
+  BodyMeasurement,
   ComebackBaseline,
   DailyCheckin,
   Goal,
   ISODate,
   MomentumSnapshot,
   PlannedSession,
+  Profile,
   Routine,
   TrainingPreferences,
   WorkoutSession,
@@ -44,6 +48,8 @@ export type EngineInput = {
   routines: Routine[];
   activeRoutineId: string | null;
   goal: Goal | null;
+  profile: Profile | null;
+  bodyMeasurements: BodyMeasurement[];
   baseline: ComebackBaseline | null;
   weekStartsOn: 0 | 1;
 };
@@ -68,6 +74,12 @@ export type EngineResult = {
   /** Set when the engine established a baseline that should be persisted. */
   derivedBaseline: ComebackBaseline | null;
   trajectory: TrajectoryResult | null;
+  /** Where the current strategy leads: date, sessions, composition. */
+  projection: PlanProjection | null;
+  /** The exact input behind it, so screens can re-project other strategies. */
+  projectionInput: ProjectionInput | null;
+  /** Share of planned sessions completed over the last four weeks, 0–1. */
+  adherenceRate: number;
   week: WeekSummary;
   lastSession: WorkoutSession | null;
   daysSinceLastSession: number | null;
@@ -345,6 +357,46 @@ export function runEngine(input: EngineInput): EngineResult {
       .filter((entry) => entry.date >= input.today && entry.status === 'planned')
       .sort((a, b) => (a.date < b.date ? -1 : 1))[0] ?? null;
 
+  // Adherence over the last four weeks, used to slow the projection for
+  // someone who is not actually training as often as the plan assumes.
+  const recentPlanned = input.plannedSessions.filter((entry) => {
+    const age = daysBetween(entry.date, input.today);
+    return age > 0 && age <= 28 && entry.status !== 'rest';
+  });
+  const adherenceRate =
+    recentPlanned.length === 0
+      ? 1
+      : round(
+          recentPlanned.filter((entry) => entry.status === 'completed').length / recentPlanned.length,
+          2,
+        );
+
+  const latestWeight = [...input.bodyMeasurements].sort((a, b) => (a.date < b.date ? -1 : 1)).pop() ?? null;
+  const rate = observedWeeklyRate(input.bodyMeasurements, input.today);
+
+  const projectionInput: ProjectionInput | null =
+    input.goal && input.profile && latestWeight
+      ? {
+          today: input.today,
+          strategy: input.goal.strategy,
+          experience: input.profile.experience,
+          currentWeightKg: latestWeight.weightKg,
+          heightCm: input.profile.heightCm,
+          // Age and sex only affect the calorie estimate; assumed when unset.
+          age: input.profile.age ?? 30,
+          sex: input.profile.sex,
+          targetWeightKg: input.goal.targetWeightKg,
+          sessionsPerWeek: input.training.preferredDaysPerWeek,
+          sessionsCompleted: sessions.filter((session) => session.date >= (input.goal as Goal).startedAt).length,
+          goalStartedAt: input.goal.startedAt,
+          observedWeeklyRateKg: rate.weeklyKg,
+          weeksOfWeightData: rate.weeks,
+          adherence: adherenceRate,
+        }
+      : null;
+
+  const projection = projectionInput ? projectPlan(projectionInput) : null;
+
   return {
     momentumSeries,
     momentum,
@@ -355,6 +407,9 @@ export function runEngine(input: EngineInput): EngineResult {
     comeback,
     derivedBaseline: input.baseline ? null : derivedBaseline,
     trajectory,
+    projection,
+    projectionInput,
+    adherenceRate,
     week,
     lastSession,
     daysSinceLastSession,
