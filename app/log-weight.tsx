@@ -24,10 +24,13 @@ export default function LogWeightScreen() {
   const todayEntry = measurements.find((entry) => entry.date === date);
   const latest = measurements[measurements.length - 1];
   const [weight, setWeight] = useState<number | null>(todayEntry?.weightKg ?? latest?.weightKg ?? null);
+  const [bodyFat, setBodyFat] = useState<number | null>(
+    todayEntry?.bodyFatPercent ?? latest?.bodyFatPercent ?? null,
+  );
 
   const save = () => {
     if (weight === null) return;
-    logBodyWeight(weight, date, 'manual');
+    logBodyWeight(weight, date, 'manual', bodyFat);
     router.back();
   };
 
@@ -48,6 +51,17 @@ export default function LogWeightScreen() {
           step={0.05}
           precision={2}
           placeholder="77.25"
+          style={styles.field}
+        />
+        <NumberInput
+          label="Body fat"
+          value={bodyFat}
+          onChange={setBodyFat}
+          suffix="%"
+          step={0.1}
+          precision={1}
+          placeholder="Optional"
+          hint="From a body-composition scale. It is what lets the plans project your composition, not just the scale."
         />
       </Section>
 
@@ -66,7 +80,9 @@ export default function LogWeightScreen() {
                 {index > 0 ? <Divider /> : null}
                 <MetricRow
                   label={formatShortDate(entry.date)}
-                  detail={entry.source === 'manual' ? 'Manual' : entry.source}
+                  detail={`${entry.source === 'manual' ? 'Manual' : entry.source}${
+                    entry.bodyFatPercent !== null ? ` · ${entry.bodyFatPercent}% fat` : ''
+                  }`}
                   value={`${entry.weightKg.toFixed(2)} kg`}
                   onPress={() => deleteBodyMeasurement(entry.id)}
                 />
@@ -85,6 +101,9 @@ export default function LogWeightScreen() {
 }
 
 const styles = StyleSheet.create({
+  field: {
+    marginBottom: spacing.lg,
+  },
   recent: {
     marginTop: spacing.xxl,
   },

@@ -19,10 +19,12 @@ import { adaptToday, type DailyAdaptation } from './training/adaptation';
 import { bestE1rmByExercise, sessionSetCount, sessionVolume } from './training/metrics';
 import { sessionMechanics, wasReduced } from './training/sessionMetrics';
 import { observedWeeklyRate } from './plan/observedRate';
+import { currentBlock, getRoute } from './plan/routes';
 import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
 import type {
   BodyMeasurement,
+  NutritionStrategy,
   ComebackBaseline,
   DailyCheckin,
   Goal,
@@ -51,6 +53,7 @@ export type EngineInput = {
   activeRoutineId: string | null;
   goal: Goal | null;
   profile: Profile | null;
+  planRoute: { routeId: string; startedAt: ISODate } | null;
   bodyMeasurements: BodyMeasurement[];
   baseline: ComebackBaseline | null;
   weekStartsOn: 0 | 1;
@@ -86,6 +89,17 @@ export type EngineResult = {
   adaptation: DailyAdaptation;
   /** Plain-language read on whether the goal date is drifting. */
   drift: { days: number; headline: string; detail: string } | null;
+  /** Progress through a multi-block route, when one is being followed. */
+  routeProgress: {
+    routeName: string;
+    blockLabel: string;
+    blockIndex: number;
+    weeksIntoBlock: number;
+    weeksLeftInBlock: number;
+    /** Set when the block's time is up and the next one should take over. */
+    nextBlock: { label: string; strategy: NutritionStrategy } | null;
+    finished: boolean;
+  } | null;
   week: WeekSummary;
   lastSession: WorkoutSession | null;
   daysSinceLastSession: number | null;
@@ -427,6 +441,7 @@ export function runEngine(input: EngineInput): EngineResult {
   });
 
   const drift = buildDrift(trajectory);
+  const routeProgress = buildRouteProgress(input);
 
   return {
     momentumSeries,
@@ -443,10 +458,54 @@ export function runEngine(input: EngineInput): EngineResult {
     adherenceRate,
     adaptation,
     drift,
+    routeProgress,
     week,
     lastSession,
     daysSinceLastSession,
     nextPlanned,
+  };
+}
+
+/**
+ * Where the user is inside a multi-block route, and whether the block they are
+ * in has run its course. The switch is never made silently — the app offers it
+ * and the user takes it.
+ */
+function buildRouteProgress(input: EngineInput): EngineResult['routeProgress'] {
+  if (!input.planRoute) return null;
+  const route = getRoute(input.planRoute.routeId);
+  if (!route) return null;
+
+  const weeksElapsed = Math.floor(daysBetween(input.planRoute.startedAt, input.today) / 7);
+  const position = currentBlock(route, weeksElapsed);
+
+  if (!position) {
+    const last = route.blocks[route.blocks.length - 1];
+    return {
+      routeName: route.name,
+      blockLabel: last.label,
+      blockIndex: route.blocks.length - 1,
+      weeksIntoBlock: last.weeks,
+      weeksLeftInBlock: 0,
+      nextBlock: null,
+      finished: true,
+    };
+  }
+
+  const dueStrategy = position.block.strategy;
+  const running = input.goal?.strategy;
+
+  return {
+    routeName: route.name,
+    blockLabel: position.block.label,
+    blockIndex: position.index,
+    weeksIntoBlock: position.weeksIntoBlock,
+    weeksLeftInBlock: position.block.weeks - position.weeksIntoBlock,
+    nextBlock:
+      running && running !== dueStrategy
+        ? { label: position.block.label, strategy: dueStrategy }
+        : null,
+    finished: false,
   };
 }
 

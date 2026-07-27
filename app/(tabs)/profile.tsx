@@ -45,6 +45,11 @@ export default function ProfileScreen() {
             onPress={() => router.push('/plan')}
           />
           <NavRow
+            label="Compare plans"
+            detail="Build then cut, lean build, cut first"
+            onPress={() => router.push('/routes')}
+          />
+          <NavRow
             label="Schedule"
             value={`${training.preferredDaysPerWeek} days`}
             detail={`${training.sessionMinutes} min · ${training.location}`}

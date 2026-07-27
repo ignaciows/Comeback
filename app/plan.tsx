@@ -320,6 +320,13 @@ export default function PlanScreen() {
         }}
       />
 
+      <MetricRow
+        label="Not sure? Compare full plans"
+        detail="Build then cut, lean build, cut first — drawn side by side"
+        onPress={() => router.push('/routes')}
+        chevron
+      />
+
       <Note style={styles.note}>{PROJECTION_CAVEAT}</Note>
       <MetricRow label="How these numbers are built" onPress={() => router.push('/method')} chevron />
     </Screen>

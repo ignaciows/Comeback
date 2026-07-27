@@ -1,0 +1,224 @@
+import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+
+import { EmptyState, Note, StatusPill } from '@/components/Feedback';
+import { Header } from '@/components/Header';
+import { Reveal } from '@/components/motion/Reveal';
+import { Screen } from '@/components/Screen';
+import { Label, Text } from '@/design-system/Text';
+import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
+import { recommendRoute, simulateAllRoutes, type RouteInput } from '@/domain/plan/routes';
+import { RouteChart } from '@/features/plan/RouteChart';
+import { useBodyWeightSeries } from '@/store/hooks';
+import { useAppStore } from '@/store/useAppStore';
+import { formatLongDate, today as todayOf } from '@/utils/date';
+
+/**
+ * Which plan should I follow?
+ *
+ * Each route is simulated week by week and drawn, because the difference
+ * between "build for three months then diet" and "gain slowly for eight" is a
+ * shape, not a sentence. One is recommended, with the reason it was picked.
+ */
+export default function RoutesScreen() {
+  const router = useRouter();
+  const profile = useAppStore((state) => state.profile);
+  const goal = useAppStore((state) => state.goal);
+  const training = useAppStore((state) => state.training);
+  const planRoute = useAppStore((state) => state.planRoute);
+  const weights = useBodyWeightSeries();
+
+  const latest = weights[weights.length - 1] ?? null;
+
+  const input: RouteInput | null = useMemo(() => {
+    if (!profile || !latest) return null;
+    return {
+      today: todayOf(),
+      currentWeightKg: latest.weightKg,
+      heightCm: profile.heightCm,
+      age: profile.age ?? 30,
+      sex: profile.sex,
+      experience: profile.experience,
+      bodyFatPercent: latest.bodyFatPercent,
+      sessionsPerWeek: training.preferredDaysPerWeek,
+    };
+  }, [profile, latest, training.preferredDaysPerWeek]);
+
+  const simulations = useMemo(() => (input ? simulateAllRoutes(input) : []), [input]);
+  const recommendation = useMemo(
+    () => (input ? recommendRoute(input, goal?.objective ?? 'build') : null),
+    [input, goal],
+  );
+
+  if (!input || simulations.length === 0) {
+    return (
+      <Screen>
+        <Header title="Plans" leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }} />
+        <EmptyState
+          title="Log your weight first"
+          description="Every route is drawn from your own starting point."
+          action={{ label: 'Log weight', onPress: () => router.push('/log-weight') }}
+        />
+      </Screen>
+    );
+  }
+
+  // One shared y-range so the curves can be compared directly.
+  const allWeights = simulations.flatMap((simulation) => simulation.points.map((point) => point.weightKg));
+  const domain: [number, number] = [Math.min(...allWeights) - 0.5, Math.max(...allWeights) + 0.5];
+
+  const ordered = [...simulations].sort((a, b) =>
+    a.route.id === recommendation?.routeId ? -1 : b.route.id === recommendation?.routeId ? 1 : 0,
+  );
+
+  return (
+    <Screen>
+      <Header
+        title="Which plan?"
+        subtitle="Same starting point, different routes"
+        leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
+      />
+
+      {recommendation ? (
+        <Reveal index={0}>
+          <View style={styles.recommendation}>
+            <Label>Recommended for you</Label>
+            <Text variant="body" tone="secondary" style={styles.recommendationText}>
+              {recommendation.reason}
+            </Text>
+          </View>
+        </Reveal>
+      ) : null}
+
+      {latest?.bodyFatPercent === null ? (
+        <Note style={styles.note}>
+          Add your body fat percentage when you log your weight and these curves show where your body fat goes, not
+          just the scale.
+        </Note>
+      ) : null}
+
+      <View style={styles.list}>
+        {ordered.map((simulation, index) => {
+          const recommended = simulation.route.id === recommendation?.routeId;
+          const active = planRoute?.routeId === simulation.route.id;
+          return (
+            <Reveal key={simulation.route.id} index={index + 1}>
+              <Pressable
+                onPress={() => router.push({ pathname: '/route/[id]', params: { id: simulation.route.id } })}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.card,
+                  recommended && styles.cardRecommended,
+                  pressed && { opacity: opacity.pressed },
+                ]}
+              >
+                <View style={styles.cardHead}>
+                  <Text variant="heading">{simulation.route.name}</Text>
+                  {active ? (
+                    <StatusPill label="Current" tone="accent" />
+                  ) : recommended ? (
+                    <StatusPill label="Recommended" tone="info" />
+                  ) : null}
+                </View>
+
+                <Text variant="bodySmall" tone="secondary" style={styles.cardSummary}>
+                  {simulation.route.summary}
+                </Text>
+
+                <RouteChart
+                  simulation={simulation}
+                  height={90}
+                  domain={domain}
+                  showBodyFat={latest?.bodyFatPercent !== null}
+                  style={styles.chart}
+                />
+
+                <View style={styles.stats}>
+                  <Stat label="Takes" value={`${simulation.totalWeeks} weeks`} />
+                  <Stat label="Muscle" value={`+${simulation.muscleGainKg} kg`} accent />
+                  <Stat
+                    label="Fat"
+                    value={`${simulation.fatChangeKg > 0 ? '+' : ''}${simulation.fatChangeKg} kg`}
+                  />
+                  <Stat label="Ends at" value={`${simulation.endWeightKg} kg`} />
+                </View>
+
+                <Text variant="caption" tone="tertiary" style={styles.cardFoot}>
+                  {`Done around ${formatLongDate(simulation.endDate)}`}
+                </Text>
+              </Pressable>
+            </Reveal>
+          );
+        })}
+      </View>
+
+      <Note style={styles.note}>
+        Curves are model estimates from population averages, simulated week by week with muscle gain capped by what
+        training can actually build. They move as your own data comes in.
+      </Note>
+    </Screen>
+  );
+}
+
+function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <View style={styles.stat}>
+      <Label>{label}</Label>
+      <Text variant="bodySmall" mono style={accent ? { color: colors.accent } : undefined}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  recommendation: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSurface,
+    marginBottom: spacing.xl,
+  },
+  recommendationText: {
+    marginTop: spacing.sm,
+  },
+  list: {
+    gap: spacing.lg,
+  },
+  card: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  cardRecommended: {
+    borderColor: colors.borderStrong,
+  },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  cardSummary: {
+    marginTop: spacing.xs,
+  },
+  chart: {
+    marginTop: spacing.lg,
+  },
+  stats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+  },
+  stat: {
+    gap: 2,
+  },
+  cardFoot: {
+    marginTop: spacing.md,
+  },
+  note: {
+    marginTop: spacing.xl,
+  },
+});

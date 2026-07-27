@@ -18,6 +18,7 @@ export function useEngine(): EngineResult {
   const activeRoutineId = useAppStore((state) => state.activeRoutineId);
   const goal = useAppStore((state) => state.goal);
   const profile = useAppStore((state) => state.profile);
+  const planRoute = useAppStore((state) => state.planRoute);
   const bodyMeasurements = useAppStore((state) => state.bodyMeasurements);
   const baseline = useAppStore((state) => state.comebackBaseline);
   const weekStartsOn = useAppStore((state) => state.preferences.weekStartsOn);
@@ -37,6 +38,7 @@ export function useEngine(): EngineResult {
         activeRoutineId,
         goal,
         profile,
+        planRoute,
         bodyMeasurements,
         baseline,
         weekStartsOn,
@@ -51,6 +53,7 @@ export function useEngine(): EngineResult {
       activeRoutineId,
       goal,
       profile,
+      planRoute,
       bodyMeasurements,
       baseline,
       weekStartsOn,

@@ -33,10 +33,11 @@ export default function TodayScreen() {
   const goal = useAppStore((state) => state.goal);
   const startSession = useAppStore((state) => state.startSession);
   const reschedulePlannedSession = useAppStore((state) => state.reschedulePlannedSession);
+  const advanceRouteBlock = useAppStore((state) => state.advanceRouteBlock);
   const plannedSessions = useAppStore((state) => state.plannedSessions);
 
   const date = todayOf();
-  const { recommendation, momentum, readiness, week, projection, adaptation, drift } = engine;
+  const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress } = engine;
   const todayPlanned = plannedSessions.find((entry) => entry.date === date && entry.status === 'planned') ?? null;
   const resting = recommendation.type === 'rest';
 
@@ -150,6 +151,15 @@ export default function TodayScreen() {
               router.push('/momentum');
             }}
           />
+          {routeProgress?.nextBlock ? (
+            <NavRow
+              label={`Time to start the ${routeProgress.nextBlock.label.toLowerCase()}`}
+              detail={`${routeProgress.routeName} · next block of your plan`}
+              tone="accent"
+              dot
+              onPress={() => advanceRouteBlock(routeProgress.nextBlock!.strategy)}
+            />
+          ) : null}
           {drift ? (
             <NavRow
               label={drift.headline}

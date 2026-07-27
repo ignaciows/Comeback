@@ -7,6 +7,7 @@ import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
 import { defaultStrategyFor } from '@/domain/plan/strategies';
 import { simulatePlan } from '@/domain/plan/simulate';
+import { getRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import { adaptSetCount } from '@/domain/training/adaptation';
 import type {
@@ -56,6 +57,16 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 
 /** How far ahead planned sessions are materialised. */
 const PLAN_HORIZON_DAYS = 21;
+
+/** Sessions a week each strategy is built around. */
+const DAYS_FOR_STRATEGY: Record<NutritionStrategy, number> = {
+  aggressive_cut: 4,
+  cut: 4,
+  lean_cut: 4,
+  maintain: 4,
+  lean_bulk: 5,
+  bulk: 5,
+};
 
 /** A sensible spread of training days for each weekly frequency. */
 export const WEEKDAYS_FOR: Record<number, number[]> = {
@@ -112,6 +123,8 @@ export type AppState = {
   comebackBaseline: ComebackBaseline | null;
   /** Strategy history; never rewritten, only appended to. */
   phases: PlanPhase[];
+  /** The multi-block route being followed, if any. */
+  planRoute: { routeId: string; startedAt: ISODate } | null;
 };
 
 type Actions = {
@@ -125,7 +138,12 @@ type Actions = {
   setLimitations: (value: string | null) => void;
 
   saveCheckin: (date: ISODate, values: Partial<Omit<DailyCheckin, 'id' | 'date' | 'createdAt' | 'updatedAt'>>) => void;
-  logBodyWeight: (weightKg: number, date?: ISODate, source?: DataSource) => void;
+  logBodyWeight: (
+    weightKg: number,
+    date?: ISODate,
+    source?: DataSource,
+    bodyFatPercent?: number | null,
+  ) => void;
   deleteBodyMeasurement: (id: string) => void;
 
   ensurePlan: (from?: ISODate) => void;
@@ -164,6 +182,9 @@ type Actions = {
   reschedulePlannedSession: (plannedSessionId: string, toDate: ISODate) => void;
 
   changeStrategy: (strategy: NutritionStrategy, options?: { targetWeightKg?: number | null; note?: string | null }) => void;
+  /** Starts a multi-block route, or advances it to its next block. */
+  applyRoute: (routeId: string) => void;
+  advanceRouteBlock: (strategy: NutritionStrategy) => void;
   applyPlanIntent: (intent: {
     objective: PlanObjective;
     speed: PlanSpeed;
@@ -197,6 +218,7 @@ const initialState: AppState = {
   bodyMeasurements: [],
   comebackBaseline: null,
   phases: [],
+  planRoute: null,
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -428,13 +450,16 @@ export const useAppStore = create<Store>()(
         track({ name: 'daily_checkin_completed', fieldsLogged });
       },
 
-      logBodyWeight: (weightKg, date = todayOf(), source = 'manual') => {
+      logBodyWeight: (weightKg, date = todayOf(), source = 'manual', bodyFatPercent = null) => {
         set((state) => {
           const existing = state.bodyMeasurements.find((entry) => entry.date === date);
           if (existing) {
             return {
               bodyMeasurements: state.bodyMeasurements.map((entry) =>
-                entry.date === date ? { ...entry, weightKg, source } : entry,
+                entry.date === date
+                  ? // A later entry without a body-fat reading keeps the old one.
+                    { ...entry, weightKg, source, bodyFatPercent: bodyFatPercent ?? entry.bodyFatPercent }
+                  : entry,
               ),
             };
           }
@@ -445,7 +470,7 @@ export const useAppStore = create<Store>()(
                 id: createId(),
                 date,
                 weightKg,
-                bodyFatPercent: null,
+                bodyFatPercent,
                 source,
                 createdAt: nowISO(),
               },
@@ -652,6 +677,7 @@ export const useAppStore = create<Store>()(
           activeRoutineId: state.activeRoutineId,
           goal: state.goal,
           profile: state.profile,
+          planRoute: state.planRoute,
           bodyMeasurements: state.bodyMeasurements,
           baseline: state.comebackBaseline,
           weekStartsOn: state.preferences.weekStartsOn,
@@ -1063,6 +1089,37 @@ export const useAppStore = create<Store>()(
         }
       },
 
+      /**
+       * Commits to a route: the first block becomes the running strategy, the
+       * route is remembered so later blocks can take over when their time
+       * comes, and the schedule follows what that block needs.
+       */
+      applyRoute: (routeId) => {
+        const route: PlanRoute | undefined = getRoute(routeId);
+        const state = get();
+        if (!route || !state.goal) return;
+
+        const date = todayOf();
+        const first = route.blocks[0];
+        set({ planRoute: { routeId, startedAt: date } });
+        get().changeStrategy(first.strategy, { note: `${route.name} · ${first.label}` });
+        get().updateTraining({
+          preferredDaysPerWeek: DAYS_FOR_STRATEGY[first.strategy],
+          preferredWeekdays:
+            WEEKDAYS_FOR[DAYS_FOR_STRATEGY[first.strategy]] ?? state.training.preferredWeekdays,
+        });
+      },
+
+      /** Moves to the next block of the running route, once its time is up. */
+      advanceRouteBlock: (strategy) => {
+        const state = get();
+        get().changeStrategy(strategy, { note: 'Next block of your plan' });
+        get().updateTraining({
+          preferredDaysPerWeek: DAYS_FOR_STRATEGY[strategy],
+          preferredWeekdays: WEEKDAYS_FOR[DAYS_FOR_STRATEGY[strategy]] ?? state.training.preferredWeekdays,
+        });
+      },
+
       persistBaseline: (baseline) => set({ comebackBaseline: baseline }),
 
       /**
@@ -1268,6 +1325,7 @@ export function selectEngine(state: AppState) {
     activeRoutineId: state.activeRoutineId,
     goal: state.goal,
     profile: state.profile,
+    planRoute: state.planRoute,
     bodyMeasurements: state.bodyMeasurements,
     baseline: state.comebackBaseline,
     weekStartsOn: state.preferences.weekStartsOn,
