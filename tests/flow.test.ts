@@ -234,6 +234,72 @@ describe('main flow', () => {
     expect(after.projection?.targetDate).not.toBeNull();
   });
 
+  it('survives state written by an older version of the app', async () => {
+    // Exactly what v1 wrote: no `strategy` on the goal, no `phases`, no age or
+    // sex on the profile. Reading it used to crash the first screen.
+    const legacy = {
+      state: {
+        schemaVersion: 1,
+        onboardingCompleted: true,
+        profile: {
+          id: 'p1',
+          name: 'Ignacio',
+          heightCm: 186,
+          experience: 'returning',
+          layoffWeeks: 4,
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        goal: {
+          id: 'g1',
+          type: 'recomposition',
+          targetWeightKg: 80,
+          proteinTargetG: null,
+          horizonWeeks: 16,
+          startedAt: '2026-07-01',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        training: {
+          minDaysPerWeek: 4,
+          preferredDaysPerWeek: 5,
+          sessionMinutes: 60,
+          preferredWeekdays: [1, 2, 3, 5, 6],
+          location: 'gym',
+          gymId: null,
+        },
+        preferences: { units: 'metric', defaultRestSeconds: 120, weekStartsOn: 1 },
+        limitations: null,
+        gyms: [],
+        routines: [],
+        activeRoutineId: null,
+        plannedSessions: [],
+        sessions: [],
+        activeSessionId: null,
+        checkins: [],
+        bodyMeasurements: [
+          { id: 'b1', date: '2026-07-01', weightKg: 77.25, bodyFatPercent: null, source: 'manual', createdAt: '' },
+        ],
+        comebackBaseline: null,
+      },
+      version: 1,
+    };
+    memory.set(STORAGE_KEY, JSON.stringify(legacy));
+
+    await useAppStore.persist.rehydrate();
+    const state = useAppStore.getState();
+
+    // Migration filled in everything the new code reads.
+    expect(state.goal?.strategy).toBe('lean_bulk');
+    expect(state.profile?.sex).toBe('unspecified');
+    expect(state.profile?.age).toBeNull();
+    expect(state.phases).toHaveLength(1);
+    expect(state.phases[0].startWeightKg).toBe(77.25);
+    // And nothing the screens read blows up.
+    expect(() => selectEngine(state)).not.toThrow();
+    expect(selectEngine(state).projection).not.toBeNull();
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();

@@ -1,20 +1,19 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { PrimaryButton, SecondaryButton } from '@/components/Button';
-import { EmptyState } from '@/components/Feedback';
-import { MetricRow } from '@/components/Metric';
+import { PrimaryButton, TextButton } from '@/components/Button';
+import { StatusPill } from '@/components/Feedback';
+import { Reveal } from '@/components/motion/Reveal';
+import { NavGroup, NavRow } from '@/components/NavRow';
 import { Screen } from '@/components/Screen';
-import { Divider, Section } from '@/components/Section';
 import { Text } from '@/design-system/Text';
-import { spacing } from '@/design-system/tokens';
-import { exerciseName } from '@/data/exercises';
+import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { estimateRoutineDayMinutes } from '@/data/routineTemplates';
-import { sessionSetCount, sessionVolume } from '@/domain/training/metrics';
 import { useActiveRoutine, useActiveSession, useCompletedSessions, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
-import { addDays, formatRelativeDay, today as todayOf } from '@/utils/date';
+import { formatRelativeDay, today as todayOf } from '@/utils/date';
 
+/** One card with the next session, then rows to everything else. */
 export default function TrainScreen() {
   const router = useRouter();
   const routine = useActiveRoutine();
@@ -22,7 +21,6 @@ export default function TrainScreen() {
   const history = useCompletedSessions();
   const activeSession = useActiveSession();
   const startSession = useAppStore((state) => state.startSession);
-  const plannedSessions = useAppStore((state) => state.plannedSessions);
 
   const date = todayOf();
   const next = engine.nextPlanned;
@@ -41,139 +39,119 @@ export default function TrainScreen() {
 
   return (
     <Screen>
-      <Text variant="title" style={styles.title}>
-        Train
-      </Text>
+      <Reveal index={0}>
+        <Text variant="title" style={styles.title}>
+          Train
+        </Text>
+      </Reveal>
 
-      {activeSession ? (
-        <Section title="In progress">
-          <Text variant="heading">{activeSession.name}</Text>
-          <PrimaryButton
-            label="Resume session"
-            onPress={() => router.push({ pathname: '/session', params: { id: activeSession.id } })}
-            style={styles.action}
-          />
-        </Section>
-      ) : (
-        <Section title="Next session">
-          {next && nextDay ? (
+      <Reveal index={1}>
+        <View style={styles.hero}>
+          {activeSession ? (
             <>
-              <Text variant="title">{nextDay.name}</Text>
-              <Text variant="bodySmall" tone="secondary" style={styles.subtitle}>
-                {`${formatRelativeDay(next.date, date)} · ${nextDay.exercises.length} exercises · about ${estimateRoutineDayMinutes(nextDay)} min`}
+              <StatusPill label="In progress" tone="info" />
+              <Text variant="display" style={styles.heroTitle}>
+                {activeSession.name}
               </Text>
-              <View style={styles.exercises}>
-                {nextDay.exercises.map((exercise) => (
-                  <View key={exercise.id} style={styles.exerciseRow}>
-                    <Text variant="bodySmall" tone="secondary">
-                      {exerciseName(exercise.exerciseId)}
-                    </Text>
-                    <Text variant="bodySmall" tone="tertiary" mono>
-                      {`${exercise.sets} × ${exercise.repMin}–${exercise.repMax}`}
-                    </Text>
-                  </View>
-                ))}
-              </View>
               <PrimaryButton
-                label={next.date === date ? 'Start session' : `Start ${nextDay.name}`}
+                label="Resume"
+                onPress={() => router.push({ pathname: '/session', params: { id: activeSession.id } })}
+                style={styles.cta}
+              />
+            </>
+          ) : nextDay && next ? (
+            <>
+              <StatusPill label={formatRelativeDay(next.date, date)} tone={next.date === date ? 'accent' : 'neutral'} />
+              <Text variant="display" style={styles.heroTitle}>
+                {nextDay.name}
+              </Text>
+              <Text variant="body" tone="secondary" style={styles.heroLine}>
+                {`${nextDay.exercises.length} exercises · about ${estimateRoutineDayMinutes(nextDay)} minutes`}
+              </Text>
+              <PrimaryButton
+                label="Start"
                 onPress={() => start(nextDay.id, nextDay.name, next.date === date ? next.id : null)}
-                style={styles.action}
+                style={styles.cta}
               />
             </>
           ) : (
-            <EmptyState
-              title="Nothing scheduled"
-              description="Your plan runs three weeks ahead. Set your training days in Profile to schedule more."
-              action={{ label: 'Open profile', onPress: () => router.push('/(tabs)/profile') }}
-            />
+            <>
+              <Text variant="display" style={styles.heroTitle}>
+                Nothing scheduled
+              </Text>
+              <Text variant="body" tone="secondary" style={styles.heroLine}>
+                Set your training days in Profile, or train freely today.
+              </Text>
+              <PrimaryButton
+                label="Free workout"
+                onPress={() => start(null, 'Free session', null)}
+                style={styles.cta}
+              />
+            </>
           )}
-          <SecondaryButton label="Free workout" onPress={() => start(null, 'Free session', null)} style={styles.action} />
-        </Section>
-      )}
+          {!activeSession && nextDay ? (
+            <TextButton
+              label="Something else today"
+              onPress={() => start(null, 'Free session', null)}
+              style={styles.alt}
+            />
+          ) : null}
+        </View>
+      </Reveal>
 
-      {routine ? (
-        <Section
-          title="Current routine"
-          action={{ label: 'Edit', onPress: () => router.push('/routine') }}
-          footnote={`${routine.name} · ${routine.daysPerWeek} days per week`}
-        >
-          {routine.days.map((day, index) => (
-            <View key={day.id}>
-              {index > 0 ? <Divider /> : null}
-              <MetricRow
-                label={day.name}
-                detail={`${day.exercises.length} exercises`}
-                value={`${estimateRoutineDayMinutes(day)}m`}
-                onPress={() => start(day.id, day.name, null)}
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
-
-      <Section
-        title="This week"
-        footnote="Planned days are created three weeks ahead and can be moved without losing credit."
-      >
-        {plannedSessions
-          .filter((entry) => entry.date >= engine.week.start && entry.date <= addDays(engine.week.start, 6))
-          .sort((a, b) => (a.date < b.date ? -1 : 1))
-          .slice(0, 7)
-          .map((entry, index) => {
-            const day = routine?.days.find((item) => item.id === entry.routineDayId);
-            return (
-              <View key={entry.id}>
-                {index > 0 ? <Divider /> : null}
-                <MetricRow
-                  label={formatRelativeDay(entry.date, date)}
-                  detail={day?.name ?? 'Rest'}
-                  value={entry.status === 'planned' ? '' : entry.status}
-                />
-              </View>
-            );
-          })}
-      </Section>
-
-      <Section title="Recent sessions" action={history.length > 0 ? { label: 'All', onPress: () => router.push('/history') } : undefined}>
-        {history.length === 0 ? (
-          <EmptyState
-            title="No sessions logged"
-            description="Your first session establishes the baseline every later comparison uses."
+      <Reveal index={2}>
+        <NavGroup style={styles.group}>
+          <NavRow
+            label="Routine"
+            value={routine ? `${routine.daysPerWeek} days` : '—'}
+            detail={routine?.name}
+            onPress={() => router.push('/routine')}
           />
-        ) : (
-          history.slice(0, 5).map((session, index) => (
-            <View key={session.id}>
-              {index > 0 ? <Divider /> : null}
-              <MetricRow
-                label={session.name}
-                detail={`${formatRelativeDay(session.date, date)} · ${sessionSetCount(session)} sets`}
-                value={`${Math.round(sessionVolume(session)).toLocaleString()} kg`}
-                onPress={() => router.push({ pathname: '/workout/[id]', params: { id: session.id } })}
-              />
-            </View>
-          ))
-        )}
-      </Section>
+          <NavRow
+            label="This week"
+            value={`${engine.week.completed} of ${engine.week.target}`}
+            onPress={() => router.push('/consistency')}
+          />
+          <NavRow
+            label="History"
+            value={`${history.length}`}
+            detail={history.length === 0 ? 'Nothing logged yet' : undefined}
+            onPress={() => router.push('/history')}
+          />
+          <NavRow label="Exercises" onPress={() => router.push('/exercises')} />
+        </NavGroup>
+      </Reveal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   title: {
-    marginBottom: spacing.xxl,
+    marginBottom: spacing.xl,
   },
-  subtitle: {
-    marginTop: spacing.xs,
+  hero: {
+    borderRadius: radius.xl,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
   },
-  exercises: {
-    marginTop: spacing.lg,
-    gap: spacing.sm,
+  heroTitle: {
+    marginTop: spacing.xl,
+    fontSize: 40,
+    lineHeight: 44,
   },
-  exerciseRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  heroLine: {
+    marginTop: spacing.sm,
   },
-  action: {
-    marginTop: spacing.lg,
+  cta: {
+    marginTop: spacing.xl,
+  },
+  alt: {
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+  },
+  group: {
+    marginTop: spacing.xl,
   },
 });

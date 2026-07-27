@@ -15,7 +15,7 @@ import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { PROJECTION_CAVEAT } from '@/data/trainingPrinciples';
 import { compareStrategies } from '@/domain/plan/projection';
-import { STRATEGIES, STRATEGY_ORDER } from '@/domain/plan/strategies';
+import { STRATEGY_ORDER, strategyProfile } from '@/domain/plan/strategies';
 import type { NutritionStrategy } from '@/domain/types';
 import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
 import { useEngine } from '@/store/hooks';
@@ -61,7 +61,7 @@ export default function PlanScreen() {
     );
   }
 
-  const currentProfile = STRATEGIES[goal.strategy];
+  const currentProfile = strategyProfile(goal.strategy);
   const pendingComparison = comparisons.find((entry) => entry.strategy === pending);
 
   return (
@@ -182,7 +182,7 @@ export default function PlanScreen() {
           footnote="Progress you have already made carries over. Switching never resets your history."
         >
           {comparisons.map((entry) => {
-            const profile = STRATEGIES[entry.strategy];
+            const profile = strategyProfile(entry.strategy);
             const active = entry.strategy === goal.strategy;
             return (
               <Pressable
@@ -247,7 +247,7 @@ export default function PlanScreen() {
               <View key={phase.id}>
                 {index > 0 ? <Divider /> : null}
                 <MetricRow
-                  label={STRATEGIES[phase.strategy].label}
+                  label={strategyProfile(phase.strategy).label}
                   detail={`${formatShortDate(phase.startedAt)} → ${phase.endedAt ? formatShortDate(phase.endedAt) : 'now'}`}
                   value={
                     phase.endWeightKg !== null && phase.startWeightKg > 0
@@ -267,10 +267,10 @@ export default function PlanScreen() {
       <ConfirmationSheet
         visible={pending !== null}
         onClose={() => setPending(null)}
-        title={pending ? `Switch to ${STRATEGIES[pending].label}` : ''}
+        title={pending ? `Switch to ${strategyProfile(pending).label}` : ''}
         message={
           pendingComparison
-            ? `${STRATEGIES[pendingComparison.strategy].tradeoff}\n\n${
+            ? `${strategyProfile(pendingComparison.strategy).tradeoff}\n\n${
                 pendingComparison.projection.targetDate
                   ? `New estimated target: ${formatLongDate(pendingComparison.projection.targetDate)}${
                       pendingComparison.deltaDays === null

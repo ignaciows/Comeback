@@ -184,3 +184,11 @@ export function defaultStrategyFor(goalType: GoalType): NutritionStrategy {
       return 'maintain';
   }
 }
+
+/**
+ * Safe lookup. A strategy read from persisted state can be missing or unknown
+ * after an upgrade; falling back beats crashing the screen that shows it.
+ */
+export function strategyProfile(strategy: NutritionStrategy | null | undefined): StrategyProfile {
+  return (strategy && STRATEGIES[strategy]) || STRATEGIES.maintain;
+}

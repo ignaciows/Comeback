@@ -1,7 +1,7 @@
 import type { Confidence, ExperienceLevel, ISODate, NutritionStrategy } from '@/domain/types';
 import { addDays, daysBetween } from '@/utils/date';
 import { clamp, round } from '@/utils/math';
-import { STRATEGIES, maintenanceCalories, monthlyMuscleGainPotential } from './strategies';
+import { maintenanceCalories, monthlyMuscleGainPotential, strategyProfile } from './strategies';
 
 export type ProjectionInput = {
   today: ISODate;
@@ -78,7 +78,7 @@ const MAX_WEEKS = 104;
  * scale disagrees with the model gets a projection that follows the scale.
  */
 export function projectPlan(input: ProjectionInput): PlanProjection {
-  const profile = STRATEGIES[input.strategy];
+  const profile = strategyProfile(input.strategy);
 
   const modelRateKg = input.currentWeightKg * profile.weeklyWeightChangePct;
 
@@ -186,8 +186,8 @@ export function projectPlan(input: ProjectionInput): PlanProjection {
   const milestones = buildMilestones(input, weeksRemaining, weeklyRateKg, totalChange);
 
   const explanation = base.usesObservedRate
-    ? `Projected from your logged rate of ${Math.abs(round(input.observedWeeklyRateKg as number, 2))} kg per week, blended with the model for ${STRATEGIES[input.strategy].label.toLowerCase()}.`
-    : `Projected from the model rate for ${STRATEGIES[input.strategy].label.toLowerCase()}. Log your weight weekly and this will follow your real rate.`;
+    ? `Projected from your logged rate of ${Math.abs(round(input.observedWeeklyRateKg as number, 2))} kg per week, blended with the model for ${strategyProfile(input.strategy).label.toLowerCase()}.`
+    : `Projected from the model rate for ${strategyProfile(input.strategy).label.toLowerCase()}. Log your weight weekly and this will follow your real rate.`;
 
   return {
     ...base,

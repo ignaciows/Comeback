@@ -154,7 +154,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -1048,11 +1048,61 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 1,
+      version: 2,
+      /**
+       * State written by an older build is missing the fields added since, and
+       * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
+       * crashes the whole app. Every new field is backfilled here.
+       */
+      migrate: (persisted, fromVersion) => {
+        const state = persisted as Partial<AppState> | undefined;
+        if (!state) return initialState;
+        if (fromVersion >= 2) return state as AppState;
+
+        const strategy =
+          state.goal?.strategy ?? (state.goal ? defaultStrategyFor(state.goal.type) : 'maintain');
+
+        const startWeightKg =
+          [...(state.bodyMeasurements ?? [])].sort((a, b) => (a.date < b.date ? -1 : 1))[0]?.weightKg ?? 0;
+
+        return {
+          ...state,
+          schemaVersion: 2,
+          profile: state.profile
+            ? { ...state.profile, age: state.profile.age ?? null, sex: state.profile.sex ?? 'unspecified' }
+            : state.profile,
+          goal: state.goal ? { ...state.goal, strategy } : state.goal,
+          phases:
+            state.phases && state.phases.length > 0
+              ? state.phases
+              : state.goal
+                ? [
+                    {
+                      id: createId(),
+                      strategy,
+                      startedAt: state.goal.startedAt,
+                      endedAt: null,
+                      startWeightKg,
+                      endWeightKg: null,
+                      targetWeightKg: state.goal.targetWeightKg ?? null,
+                      note: null,
+                      createdAt: nowISO(),
+                    },
+                  ]
+                : [],
+        } as AppState;
+      },
       // `hydrated` is runtime-only; everything else is persisted.
       partialize: ({ hydrated, ...rest }) => rest,
-      onRehydrateStorage: () => (state) => {
-        state?.setHydrated();
+      onRehydrateStorage: () => (state, error) => {
+        // Flip the gate through the store rather than the callback argument:
+        // on a read error `state` is undefined, and the app would otherwise
+        // wait forever on a screen that never changes.
+        useAppStore.setState({ hydrated: true });
+        if (error) {
+          console.warn('[comeback] could not read stored data', error);
+          return;
+        }
         // Keep the plan rolling forward every time the app opens.
         state?.ensurePlan();
       },

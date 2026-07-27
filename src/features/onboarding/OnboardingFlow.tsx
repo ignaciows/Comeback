@@ -17,7 +17,7 @@ import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/t
 import { exerciseName } from '@/data/exercises';
 import { buildInitialRoutine, estimateRoutineDayMinutes, firstBlockObjective } from '@/data/routineTemplates';
 import { projectPlan } from '@/domain/plan/projection';
-import { STRATEGIES, defaultStrategyFor } from '@/domain/plan/strategies';
+import { defaultStrategyFor, strategyProfile } from '@/domain/plan/strategies';
 import type { GoalType } from '@/domain/types';
 import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
 import { useAppStore, type OnboardingPayload } from '@/store/useAppStore';
@@ -78,7 +78,7 @@ export function OnboardingFlow() {
   /** Target that the chosen strategy reaches in the default horizon. */
   const suggestedTarget = useMemo(() => {
     if (!strategy || weightKg === null) return null;
-    const rate = STRATEGIES[strategy].weeklyWeightChangePct * weightKg;
+    const rate = strategyProfile(strategy).weeklyWeightChangePct * weightKg;
     return round(weightKg + rate * DEFAULTS.horizonWeeks, 1);
   }, [strategy, weightKg]);
 
@@ -297,7 +297,7 @@ export function OnboardingFlow() {
               </Text>
             </Animated.View>
             <Text variant="bodySmall" tone="secondary">
-              {`${routine.daysPerWeek} days a week · ${STRATEGIES[strategy].label.toLowerCase()} · about ${DEFAULTS.sessionMinutes} minutes a session`}
+              {`${routine.daysPerWeek} days a week · ${strategyProfile(strategy).label.toLowerCase()} · about ${DEFAULTS.sessionMinutes} minutes a session`}
             </Text>
           </Reveal>
 
