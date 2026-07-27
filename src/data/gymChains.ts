@@ -35,6 +35,18 @@ const FULL_GYM: Partial<Record<EquipmentId, EquipmentAvailability>> = {
   band: 'unsure',
 };
 
+/** EMS studios: electrodes and a trainer, nothing to load a lift with. */
+const EMS_STUDIO: Partial<Record<EquipmentId, EquipmentAvailability>> = {
+  barbell: 'unavailable',
+  dumbbell: 'unavailable',
+  machine: 'unavailable',
+  cable: 'unavailable',
+  rack: 'unavailable',
+  bench: 'unavailable',
+  bodyweight: 'available',
+  cardio: 'unavailable',
+};
+
 export const GYM_CHAINS: ChainProfile[] = [
   {
     id: 'mcfit',
@@ -100,19 +112,69 @@ export const GYM_CHAINS: ChainProfile[] = [
     equipment: FULL_GYM,
   },
   {
+    id: 'justfit',
+    match: ['just fit', 'justfit'],
+    label: 'Just Fit',
+    note: 'Cologne chain, most locations in the city. Full free-weight area and machines.',
+    equipment: FULL_GYM,
+  },
+  {
+    id: 'nextdoor',
+    match: ['next door'],
+    label: 'Next Door',
+    note: 'Just Fit’s smaller format. Free weights and machines, less floor space.',
+    equipment: { ...FULL_GYM, kettlebell: 'unsure' },
+  },
+  {
+    id: 'basicfit',
+    match: ['basic-fit', 'basic fit', 'basicfit'],
+    label: 'Basic-Fit',
+    note: 'Full equipment, cheap, usually open long hours.',
+    equipment: FULL_GYM,
+  },
+  {
+    id: 'xtrafit',
+    match: ['xtrafit', 'xtra fit'],
+    label: 'Xtrafit',
+    note: 'Full gym with a proper free-weight section.',
+    equipment: FULL_GYM,
+  },
+  {
+    id: 'fitnessloft',
+    match: ['fitnessloft', 'fitness loft'],
+    label: 'Fitnessloft',
+    note: 'Full equipment; free-weight area varies by site.',
+    equipment: { ...FULL_GYM, rack: 'unsure' },
+  },
+  {
     id: 'bodystreet',
     match: ['bodystreet'],
     label: 'Bodystreet',
     note: 'EMS studio — no conventional weights. Not suitable for these routines.',
+    equipment: EMS_STUDIO,
+  },
+  {
+    id: 'koerperformen',
+    match: ['körperformen', 'koerperformen'],
+    label: 'Körperformen',
+    note: 'EMS studio — no conventional weights. Not suitable for these routines.',
+    equipment: EMS_STUDIO,
+  },
+  {
+    id: 'beat81',
+    match: ['beat81', 'beat 81'],
+    label: 'Beat81',
+    note: 'HIIT classes on bikes and treadmills. No racks or barbells — cardio, not lifting.',
     equipment: {
       barbell: 'unavailable',
-      dumbbell: 'unavailable',
+      dumbbell: 'available',
       machine: 'unavailable',
       cable: 'unavailable',
       rack: 'unavailable',
-      bench: 'unavailable',
+      bench: 'unsure',
       bodyweight: 'available',
-      cardio: 'unavailable',
+      kettlebell: 'unsure',
+      cardio: 'available',
     },
   },
   {

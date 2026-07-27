@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { GYM_CHAINS, matchChain } from '@/data/gymChains';
-import { distanceBetween, equipmentSummary, formatDistance, toResult } from '@/services/gyms/gymSearch';
+import {
+  distanceBetween,
+  equipmentSummary,
+  formatDistance,
+  isStrengthGym,
+  toResult,
+} from '@/services/gyms/gymSearch';
+import cologneFixture from './fixtures/cologne-gyms.json';
 
 const cologne = { lat: 50.9375, lon: 6.9603 };
 
@@ -95,6 +102,67 @@ describe('chain equipment', () => {
       cologne,
     );
     expect(result?.equipmentSource).toBe('chain');
-    expect(equipmentSummary(result!)).toMatch(/categories/);
+    expect(equipmentSummary(result!)).toMatch(/9 categories/);
+  });
+
+  it('counts one category in the singular', () => {
+    const result = toResult(
+      { type: 'node', id: 7, lat: 50.94, lon: 6.96, tags: { name: 'Bodystreet Köln' } },
+      cologne,
+    );
+    // Bodyweight is all an EMS studio offers.
+    expect(equipmentSummary(result!)).toBe('1 category · 7 missing');
+  });
+});
+
+/**
+ * Against real OSM data pulled from around Cologne centre, so the filtering
+ * and chain matching are pinned to tags people actually wrote rather than to
+ * tags I imagined.
+ */
+describe('real Cologne data', () => {
+  const results = (cologneFixture as Parameters<typeof toResult>[0][])
+    .map((element) => toResult(element, cologne))
+    .filter((result): result is NonNullable<typeof result> => result !== null);
+
+  const named = (name: string) => results.find((result) => result.name === name);
+
+  it('keeps the gyms and drops the yoga and pilates studios', () => {
+    expect(named('McFIT Köln Kalk')).toBeDefined();
+    expect(named('Holmes Place')).toBeDefined();
+    expect(named('Iron&Soul')).toBeDefined();
+    expect(named('Yogaschule Köln')).toBeUndefined();
+    expect(named('Reforma Pilates Club')).toBeUndefined();
+  });
+
+  it('keeps a gym that also offers yoga classes', () => {
+    // Tagged "fitness;yoga;gymnastics" in OSM — it is still a gym with a floor.
+    expect(isStrengthGym({ name: 'Just Fit 13 Classic', sport: 'fitness;yoga;gymnastics' })).toBe(true);
+    expect(named('Just Fit 13 Classic')?.chain?.id).toBe('justfit');
+  });
+
+  it('identifies the Cologne chains', () => {
+    expect(named('Holmes Place')?.chain?.id).toBe('holmesplace');
+    expect(named('Basic-Fit')?.chain?.id).toBe('basicfit');
+    expect(named('Next Door 03')?.chain?.id).toBe('nextdoor');
+    expect(named('Kieser Training')?.chain?.id).toBe('kieser');
+    expect(named('Beat81')?.chain?.id).toBe('beat81');
+  });
+
+  it('leaves a real independent gym unclaimed', () => {
+    expect(named('Iron&Soul')?.chain).toBeNull();
+    expect(named('Iron&Soul')?.equipmentSource).toBe('unknown');
+  });
+
+  it('carries through the details a person needs to actually go', () => {
+    const mcfit = named('McFIT Köln Kalk');
+    expect(mcfit?.address).toBe('Wipperfürther Straße 25, Köln');
+    expect(mcfit?.openingHours).toBe('24/7');
+    expect(mcfit?.website).toBe('https://www.mcfit.com/studio/koeln-kalk');
+  });
+
+  it('says plainly that a class studio has no barbell', () => {
+    expect(named('Beat81')?.equipment.barbell).toBe('unavailable');
+    expect(named('Beat81')?.equipment.rack).toBe('unavailable');
   });
 });

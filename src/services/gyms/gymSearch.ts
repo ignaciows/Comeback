@@ -15,6 +15,12 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
+/**
+ * Overpass rejects anonymous clients with a 406 and its usage policy asks
+ * callers to identify themselves, so the app says who it is.
+ */
+const USER_AGENT = 'Comeback/0.1 (training app; gym search)';
+
 /** Cities the app can search without a location permission. */
 export const CITIES = [
   { id: 'cologne', label: 'Cologne', lat: 50.9375, lon: 6.9603 },
@@ -72,6 +78,42 @@ function buildAddress(tags: Record<string, string>): string | null {
   return parts.length > 0 ? parts.join(', ') : null;
 }
 
+/**
+ * OSM files yoga studios, pilates rooms and martial-arts gyms under the same
+ * `fitness_centre` tag as a place with racks and barbells. Around Cologne
+ * centre that is a third of the results, which is not what someone looking for
+ * somewhere to lift needs to scroll through.
+ *
+ * The `sport` tag decides it where present — that is real data, not a guess.
+ * Where it is absent, only unambiguous disciplines are read out of the name;
+ * anything uncertain is kept, because dropping a real gym is the worse error.
+ */
+const STRENGTH_SPORTS = ['fitness', 'weightlifting', 'gym', 'bodybuilding', 'crossfit', 'multi'];
+const NON_STRENGTH_NAMES = [
+  'yoga',
+  'pilates',
+  'barre',
+  'muay thai',
+  'mma',
+  'pole fitness',
+  'pole dance',
+  'capoeira',
+  'ballett',
+  'tanzschule',
+];
+
+export function isStrengthGym(tags: Record<string, string>): boolean {
+  const sport = tags.sport;
+  if (sport) {
+    // A tag like "fitness;yoga;gymnastics" still means there is a gym floor.
+    return sport
+      .split(';')
+      .some((value) => STRENGTH_SPORTS.includes(value.trim().toLowerCase()));
+  }
+  const name = `${tags.name ?? ''}`.toLowerCase();
+  return !NON_STRENGTH_NAMES.some((word) => name.includes(word));
+}
+
 /** Turns one Overpass element into a result, or null if it is unusable. */
 export function toResult(
   element: OverpassElement,
@@ -80,6 +122,7 @@ export function toResult(
   const tags = element.tags ?? {};
   const name = tags.name ?? tags.brand;
   if (!name) return null;
+  if (!isStrengthGym(tags)) return null;
 
   const lat = element.lat ?? element.center?.lat;
   const lon = element.lon ?? element.center?.lon;
@@ -128,7 +171,10 @@ export async function searchGyms({
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT,
+        },
         body: `data=${encodeURIComponent(query)}`,
         signal,
       });
@@ -168,7 +214,9 @@ export function equipmentSummary(result: GymSearchResult): string {
   const available = Object.values(result.equipment).filter((value) => value === 'available').length;
   const unavailable = Object.values(result.equipment).filter((value) => value === 'unavailable').length;
 
+  const categories = `${available} ${available === 1 ? 'category' : 'categories'}`;
+
   if (result.equipmentSource === 'unknown') return 'Equipment unknown';
-  if (unavailable > 0) return `${available} categories · ${unavailable} missing`;
-  return `${available} equipment categories`;
+  if (unavailable > 0) return `${categories} · ${unavailable} missing`;
+  return `${categories} of equipment`;
 }
