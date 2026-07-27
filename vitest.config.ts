@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 /**
  * The domain layer imports no React Native, so it runs directly in node with no
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@': resolve(process.cwd(), 'src'),
     },
   },
   test: {

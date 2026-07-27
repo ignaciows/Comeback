@@ -1,6 +1,6 @@
 # Comeback
 
-Adaptive training app for coming back after a break. Built with Expo (SDK 57),
+Adaptive training app for coming back after a break. Built with Expo (SDK 54),
 React Native, TypeScript and expo-router.
 
 Comeback answers four questions every day:
@@ -20,7 +20,7 @@ and it explains every number it shows.
 
 ```bash
 npm install
-npx expo start        # scan the QR with Expo Go (SDK 57) on your iPhone
+npx expo start        # scan the QR with Expo Go (SDK 54) on your iPhone
 ```
 
 The whole MVP runs on device with no backend. Data is stored locally and
@@ -42,9 +42,11 @@ export EXPO_TOKEN=...                        # never commit this
 eas update --branch preview --environment preview --message "..."
 ```
 
-EAS updates are consumed by development and production builds, **not by Expo
-Go** — Expo Go runs the app from a local dev server (`npx expo start`). To get
-Comeback onto an iPhone without a dev server you need a build:
+The project targets **SDK 54**, which is the newest SDK the App Store build of
+Expo Go supports. Updates published on that runtime (`exposdk:54.0.0`) open
+directly in Expo Go from the project's Home screen — no dev server needed.
+
+For a standalone install, independent of Expo Go:
 
 ```bash
 eas build --platform ios --profile preview   # requires an Apple Developer account

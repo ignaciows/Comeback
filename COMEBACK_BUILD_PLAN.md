@@ -16,7 +16,7 @@ expo-router + TypeScript + Zustand.
 | `app/` | 9 game routes | Removed |
 | `src/engine`, `src/data`, `src/features`, `src/theme`, `src/components` | Game simulation, HUD, biomes | Removed |
 | `docs/` | Game science docs, Higgsfield prompts | Removed |
-| `package.json` | Expo 57, RN 0.86, React 19, expo-router 57, Zustand 5, Reanimated 4, SVG, AsyncStorage | **Kept** — stack matches the target stack |
+| `package.json` | Expo 57, RN 0.86, React 19, expo-router 57, Zustand 5, Reanimated 4, SVG, AsyncStorage | **Kept, then pinned to SDK 54** — the stack matches the target, but the App Store build of Expo Go only supports SDK 54 |
 | `babel.config.js`, `tsconfig.json` (strict, `@/*` alias) | Correct | Kept |
 | `app.json`, `eas.json`, assets | Game branding | Rebranded to Comeback |
 
@@ -140,7 +140,7 @@ motivation, compared against the user's own rolling baseline.
 
 ## 5. Definition of done for the MVP
 
-- [x] Runs on iPhone through Expo Go (SDK 57).
+- [x] Runs on iPhone through Expo Go (SDK 54).
 - [x] Main flow uses no mocks — onboarding → check-in → session → momentum →
       progress is backed by persisted user data.
 - [x] Data survives a restart.
