@@ -159,7 +159,7 @@ export const PLANNED_HEALTH_SOURCES: { id: DataSource; label: string; note: stri
 
 /**
  * These need native modules, so they only work in a development or production
- * build — not in Expo Go. The interfaces above are ready; what is missing is
- * the build, not the code around them.
+ * build — not in Expo Go. The interfaces above are implemented; what is missing
+ * is the build. See docs/health-integration.md.
  */
 export const REQUIRES_NATIVE_BUILD = true;

@@ -43,6 +43,12 @@
           "resizeMode": "contain",
           "backgroundColor": "#0A0B0D"
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Comeback uses your location only to find gyms near you. It is never stored or sent anywhere."
+        }
       ]
     ],
     "experiments": {

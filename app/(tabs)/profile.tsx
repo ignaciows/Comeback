@@ -63,8 +63,9 @@ export default function ProfileScreen() {
           />
           <NavRow
             label="Gym"
-            value={gym?.name ?? 'Not set'}
-            onPress={() => router.push('/gym')}
+            value={gym?.name ? gym.name.split(' · ')[0] : 'Find one'}
+            detail={gym ? 'Equipment and location' : 'Search gyms near you'}
+            onPress={() => router.push(gym ? '/gym' : '/gyms')}
           />
         </NavGroup>
       </Reveal>

@@ -4,8 +4,9 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { Note } from '@/components/Feedback';
 import { Label, Text } from '@/design-system/Text';
 import { colors, spacing } from '@/design-system/tokens';
-import { exerciseName, getExercise } from '@/data/exercises';
+import { MUSCLE_GROUP_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { guidanceFor } from '@/data/exerciseGuidance';
+import { MuscleMap } from './MuscleMap';
 
 /** Numbered or bulleted lines under a small heading. */
 function Block({ title, items, numbered = false }: { title: string; items: string[]; numbered?: boolean }) {
@@ -35,6 +36,13 @@ export function FormGuideContent({ exerciseId }: { exerciseId: string }) {
 
   return (
     <View>
+      {/* What it works, before how to do it. */}
+      <MuscleMap
+        primary={exercise.primaryMuscle}
+        secondary={exercise.secondaryMuscles}
+        height={150}
+        style={styles.map}
+      />
       <Block title="Set up" items={guidance.setup} />
       <Block title="Execution" items={guidance.execution} numbered />
       <Block title="Cues" items={guidance.cues} />
@@ -79,6 +87,9 @@ export function FormGuideSheet({
 }
 
 const styles = StyleSheet.create({
+  map: {
+    marginBottom: spacing.xl,
+  },
   block: {
     marginBottom: spacing.xl,
   },

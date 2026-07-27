@@ -158,6 +158,13 @@ type Actions = {
   moveRoutineExercise: (routineDayId: string, routineExerciseId: string, direction: -1 | 1) => void;
   setGymEquipment: (gymId: string, equipmentId: string, availability: EquipmentAvailability) => void;
   createGym: (name: string) => string;
+  /** Adopts a gym found in the search as the user's own. */
+  adoptGym: (gym: {
+    name: string;
+    equipment: Partial<Record<string, EquipmentAvailability>>;
+    address?: string | null;
+    source?: 'chain' | 'unknown';
+  }) => void;
 
   startSession: (options: {
     routineId?: string | null;
@@ -191,6 +198,11 @@ type Actions = {
     fatTolerance: FatTolerance;
     targetWeightKg?: number | null;
     horizonWeeks?: number;
+  }) => void;
+  /** Writes an import from a health source into the store. */
+  applyHealthSync: (result: {
+    weights: BodyMeasurement[];
+    sleep: { date: ISODate; hours: number }[];
   }) => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
@@ -648,6 +660,28 @@ export const useAppStore = create<Store>()(
         };
         set((state) => ({ gyms: [...state.gyms, gym], training: { ...state.training, gymId: gym.id } }));
         return gym.id;
+      },
+
+      adoptGym: ({ name, equipment, address, source }) => {
+        const timestamp = nowISO();
+        const gym: Gym = {
+          id: createId(),
+          // The address is part of the name so the user can tell two branches
+          // of the same chain apart.
+          name: address ? `${name} · ${address}` : name,
+          equipment: Object.fromEntries(
+            Object.entries(equipment).filter(([, value]) => value !== undefined),
+          ) as Gym['equipment'],
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        set((state) => ({
+          gyms: [...state.gyms, gym],
+          training: { ...state.training, gymId: gym.id },
+        }));
+        if (source === 'chain') {
+          console.log('[comeback] equipment pre-filled from chain profile; confirm on site');
+        }
       },
 
       setGymEquipment: (gymId, equipmentId, availability) =>
@@ -1117,6 +1151,48 @@ export const useAppStore = create<Store>()(
         get().updateTraining({
           preferredDaysPerWeek: DAYS_FOR_STRATEGY[strategy],
           preferredWeekdays: WEEKDAYS_FOR[DAYS_FOR_STRATEGY[strategy]] ?? state.training.preferredWeekdays,
+        });
+      },
+
+      applyHealthSync: ({ weights, sleep }) => {
+        const timestamp = nowISO();
+        set((state) => {
+          const byDate = new Map(state.bodyMeasurements.map((entry) => [entry.date, entry]));
+          for (const entry of weights) byDate.set(entry.date, entry);
+
+          const checkinByDate = new Map(state.checkins.map((entry) => [entry.date, entry]));
+          for (const entry of sleep) {
+            const existing = checkinByDate.get(entry.date);
+            if (existing) {
+              // Only fills a gap; a value the user typed is never replaced.
+              if (existing.sleepHours === null) {
+                checkinByDate.set(entry.date, {
+                  ...existing,
+                  sleepHours: entry.hours,
+                  updatedAt: timestamp,
+                });
+              }
+            } else {
+              checkinByDate.set(entry.date, {
+                id: createId(),
+                date: entry.date,
+                sleepHours: entry.hours,
+                sleepQuality: null,
+                energy: null,
+                soreness: null,
+                stress: null,
+                motivation: null,
+                source: 'apple_watch',
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              });
+            }
+          }
+
+          return {
+            bodyMeasurements: [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+            checkins: [...checkinByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+          };
         });
       },
 
