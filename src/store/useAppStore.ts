@@ -6,6 +6,9 @@ import { getExercise } from '@/data/exercises';
 import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
 import { defaultStrategyFor } from '@/domain/plan/strategies';
+import { simulatePlan } from '@/domain/plan/simulate';
+import { observedWeeklyRate } from '@/domain/plan/observedRate';
+import { adaptSetCount } from '@/domain/training/adaptation';
 import type {
   BodyMeasurement,
   ComebackBaseline,
@@ -13,9 +16,12 @@ import type {
   DataSource,
   EquipmentAvailability,
   Goal,
+  FatTolerance,
   Gym,
   ISODate,
   NutritionStrategy,
+  PlanObjective,
+  PlanSpeed,
   PlanPhase,
   PlannedSession,
   Profile,
@@ -51,6 +57,15 @@ const DEFAULT_PREFERENCES: UserPreferences = {
 /** How far ahead planned sessions are materialised. */
 const PLAN_HORIZON_DAYS = 21;
 
+/** A sensible spread of training days for each weekly frequency. */
+export const WEEKDAYS_FOR: Record<number, number[]> = {
+  2: [2, 5],
+  3: [1, 3, 5],
+  4: [1, 2, 4, 5],
+  5: [1, 2, 3, 5, 6],
+  6: [1, 2, 3, 4, 5, 6],
+};
+
 export type OnboardingPayload = {
   name: string;
   heightCm: number;
@@ -58,6 +73,9 @@ export type OnboardingPayload = {
   experience: Profile['experience'];
   layoffWeeks: number;
   goalType: Goal['type'];
+  objective: PlanObjective;
+  speed: PlanSpeed;
+  fatTolerance: FatTolerance;
   strategy?: NutritionStrategy;
   targetWeightKg: number | null;
   horizonWeeks: number;
@@ -146,6 +164,13 @@ type Actions = {
   reschedulePlannedSession: (plannedSessionId: string, toDate: ISODate) => void;
 
   changeStrategy: (strategy: NutritionStrategy, options?: { targetWeightKg?: number | null; note?: string | null }) => void;
+  applyPlanIntent: (intent: {
+    objective: PlanObjective;
+    speed: PlanSpeed;
+    fatTolerance: FatTolerance;
+    targetWeightKg?: number | null;
+    horizonWeeks?: number;
+  }) => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
   resetAll: () => void;
@@ -254,6 +279,9 @@ export const useAppStore = create<Store>()(
         const goal: Goal = {
           id: createId(),
           type: payload.goalType,
+          objective: payload.objective,
+          speed: payload.speed,
+          fatTolerance: payload.fatTolerance,
           strategy,
           targetWeightKg: payload.targetWeightKg,
           proteinTargetG: null,
@@ -612,6 +640,22 @@ export const useAppStore = create<Store>()(
 
       startSession: ({ routineId = null, routineDayId = null, intent = 'full', name, plannedSessionId = null }) => {
         const state = get();
+        // Today's adaptation shapes the session before it starts: a good day
+        // gets an extra set on the main lifts, a bad one gets fewer.
+        const adaptation = runEngine({
+          today: todayOf(),
+          sessions: state.sessions,
+          plannedSessions: state.plannedSessions,
+          checkins: state.checkins,
+          training: state.training,
+          routines: state.routines,
+          activeRoutineId: state.activeRoutineId,
+          goal: state.goal,
+          profile: state.profile,
+          bodyMeasurements: state.bodyMeasurements,
+          baseline: state.comebackBaseline,
+          weekStartsOn: state.preferences.weekStartsOn,
+        }).adaptation;
         const routine =
           state.routines.find((entry) => entry.id === routineId) ??
           state.routines.find((entry) => entry.days.some((day) => day.id === routineDayId)) ??
@@ -627,13 +671,16 @@ export const useAppStore = create<Store>()(
 
         const exercises: WorkoutExercise[] = planned.map((exercise, index) => {
           const previous = lastPerformance(state.sessions, exercise.exerciseId);
+          const isMainLift = index < 2 && Boolean(getExercise(exercise.exerciseId)?.isCompound);
+          const setCount =
+            intent === 'full' ? adaptSetCount(exercise.sets, adaptation, isMainLift) : exercise.sets;
           return {
             id: createId(),
             exerciseId: exercise.exerciseId,
             order: index,
             substitutedFrom: null,
             note: null,
-            sets: Array.from({ length: exercise.sets }, (_, setIndex) =>
+            sets: Array.from({ length: setCount }, (_, setIndex) =>
               makeSet(setIndex, {
                 weightKg: previous?.weightKg ?? null,
                 reps: previous?.reps ?? exercise.repMin,
@@ -934,6 +981,88 @@ export const useAppStore = create<Store>()(
         });
       },
 
+      /**
+       * Applies a plan chosen in the simulator. The user picks what they want
+       * and how fast; frequency, strategy and schedule are derived here and
+       * written in one go, with the previous phase closed rather than deleted.
+       */
+      applyPlanIntent: ({ objective, speed, fatTolerance, targetWeightKg, horizonWeeks }) => {
+        const state = get();
+        if (!state.profile) return;
+
+        const date = todayOf();
+        const latestWeight =
+          [...state.bodyMeasurements].sort((a, b) => (a.date < b.date ? -1 : 1)).pop()?.weightKg ?? null;
+        if (latestWeight === null) return;
+
+        const rate = observedWeeklyRate(state.bodyMeasurements, date);
+        const simulation = simulatePlan({
+          today: date,
+          objective,
+          speed,
+          fatTolerance,
+          currentWeightKg: latestWeight,
+          heightCm: state.profile.heightCm,
+          age: state.profile.age ?? 30,
+          sex: state.profile.sex,
+          experience: state.profile.experience,
+          targetWeightKg: targetWeightKg ?? state.goal?.targetWeightKg ?? null,
+          horizonWeeks: horizonWeeks ?? state.goal?.horizonWeeks ?? 12,
+          sessionsCompleted: state.sessions.filter((session) => session.status === 'completed').length,
+          goalStartedAt: state.goal?.startedAt ?? date,
+          observedWeeklyRateKg: rate.weeklyKg,
+          weeksOfWeightData: rate.weeks,
+          adherence: 1,
+        });
+
+        const strategyChanged = state.goal?.strategy !== simulation.strategy;
+        const timestamp = nowISO();
+
+        const phases: PlanPhase[] = strategyChanged
+          ? [
+              ...state.phases.map((phase) =>
+                phase.endedAt === null ? { ...phase, endedAt: date, endWeightKg: latestWeight } : phase,
+              ),
+              {
+                id: createId(),
+                strategy: simulation.strategy,
+                startedAt: date,
+                endedAt: null,
+                startWeightKg: latestWeight,
+                endWeightKg: null,
+                targetWeightKg: targetWeightKg ?? state.goal?.targetWeightKg ?? null,
+                note: null,
+                createdAt: timestamp,
+              },
+            ]
+          : state.phases;
+
+        set({
+          phases,
+          goal: state.goal
+            ? {
+                ...state.goal,
+                objective,
+                speed,
+                fatTolerance,
+                strategy: simulation.strategy,
+                targetWeightKg: targetWeightKg ?? state.goal.targetWeightKg,
+                horizonWeeks: horizonWeeks ?? state.goal.horizonWeeks,
+                updatedAt: timestamp,
+              }
+            : state.goal,
+        });
+
+        // Frequency is an output of the pace, so the schedule follows it.
+        if (simulation.daysPerWeek !== state.training.preferredDaysPerWeek) {
+          get().updateTraining({
+            preferredDaysPerWeek: simulation.daysPerWeek,
+            minDaysPerWeek: Math.max(2, simulation.daysPerWeek - 1),
+            preferredWeekdays: WEEKDAYS_FOR[simulation.daysPerWeek] ?? state.training.preferredWeekdays,
+          });
+        }
+      },
+
       persistBaseline: (baseline) => set({ comebackBaseline: baseline }),
 
       /**
@@ -952,6 +1081,9 @@ export const useAppStore = create<Store>()(
           experience: 'returning',
           layoffWeeks: 6,
           goalType: 'recomposition',
+          objective: 'recomp',
+          speed: 'steady',
+          fatTolerance: 'some',
           targetWeightKg: 80,
           horizonWeeks: 16,
           daysPerWeek: 5,
@@ -1071,7 +1203,21 @@ export const useAppStore = create<Store>()(
           profile: state.profile
             ? { ...state.profile, age: state.profile.age ?? null, sex: state.profile.sex ?? 'unspecified' }
             : state.profile,
-          goal: state.goal ? { ...state.goal, strategy } : state.goal,
+          goal: state.goal
+            ? {
+                ...state.goal,
+                strategy,
+                objective:
+                  state.goal.objective ??
+                  (state.goal.type === 'lose_fat'
+                    ? 'lean'
+                    : state.goal.type === 'recomposition'
+                      ? 'recomp'
+                      : 'build'),
+                speed: state.goal.speed ?? 'steady',
+                fatTolerance: state.goal.fatTolerance ?? 'some',
+              }
+            : state.goal,
           phases:
             state.phases && state.phases.length > 0
               ? state.phases

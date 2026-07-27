@@ -36,7 +36,7 @@ export default function TodayScreen() {
   const plannedSessions = useAppStore((state) => state.plannedSessions);
 
   const date = todayOf();
-  const { recommendation, momentum, readiness, week, projection } = engine;
+  const { recommendation, momentum, readiness, week, projection, adaptation, drift } = engine;
   const todayPlanned = plannedSessions.find((entry) => entry.date === date && entry.status === 'planned') ?? null;
   const resting = recommendation.type === 'rest';
 
@@ -95,8 +95,14 @@ export default function TodayScreen() {
               ? 'Session in progress.'
               : resting
                 ? 'Nothing scheduled. Rest is part of the plan.'
-                : `${recommendation.estimatedMinutes} minutes`}
+                : `${recommendation.estimatedMinutes} minutes · ${adaptation.headline.toLowerCase()}`}
           </Text>
+
+          {!activeSession && !resting && adaptation.setDelta !== 0 ? (
+            <Text variant="caption" tone="tertiary" style={styles.heroNote}>
+              {adaptation.reason}
+            </Text>
+          ) : null}
 
           {activeSession ? (
             <PrimaryButton
@@ -144,6 +150,15 @@ export default function TodayScreen() {
               router.push('/momentum');
             }}
           />
+          {drift ? (
+            <NavRow
+              label={drift.headline}
+              detail={drift.detail}
+              tone={drift.days > 0 ? 'warning' : 'accent'}
+              dot
+              onPress={() => router.push('/plan')}
+            />
+          ) : null}
           <NavRow
             label="Plan"
             value={
@@ -189,6 +204,9 @@ const styles = StyleSheet.create({
     lineHeight: 44,
   },
   heroLine: {
+    marginTop: spacing.sm,
+  },
+  heroNote: {
     marginTop: spacing.sm,
   },
   cta: {

@@ -15,7 +15,9 @@ import {
   generateDailyRecommendation,
   type RecommendationResult,
 } from './recommendations/generateDailyRecommendation';
+import { adaptToday, type DailyAdaptation } from './training/adaptation';
 import { bestE1rmByExercise, sessionSetCount, sessionVolume } from './training/metrics';
+import { sessionMechanics, wasReduced } from './training/sessionMetrics';
 import { observedWeeklyRate } from './plan/observedRate';
 import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
@@ -80,6 +82,10 @@ export type EngineResult = {
   projectionInput: ProjectionInput | null;
   /** Share of planned sessions completed over the last four weeks, 0–1. */
   adherenceRate: number;
+  /** How today's session should differ from the plan. */
+  adaptation: DailyAdaptation;
+  /** Plain-language read on whether the goal date is drifting. */
+  drift: { days: number; headline: string; detail: string } | null;
   week: WeekSummary;
   lastSession: WorkoutSession | null;
   daysSinceLastSession: number | null;
@@ -105,13 +111,26 @@ export function toSessionSummary(session: WorkoutSession): SessionSummary {
 function toPlannedOutcomes(
   planned: PlannedSession[],
   sessions: WorkoutSession[],
+  routines: Routine[],
 ): PlannedOutcome[] {
-  const intentBySessionId = new Map(sessions.map((session) => [session.id, session.intent]));
-  return planned.map((entry) => ({
-    date: entry.date,
-    status: entry.status,
-    intent: entry.sessionId ? intentBySessionId.get(entry.sessionId) : undefined,
-  }));
+  const sessionById = new Map(sessions.map((session) => [session.id, session]));
+  const plannedSetsByDay = new Map<string, number>();
+  for (const routine of routines) {
+    for (const day of routine.days) {
+      plannedSetsByDay.set(day.id, day.exercises.reduce((total, exercise) => total + exercise.sets, 0));
+    }
+  }
+
+  return planned.map((entry) => {
+    const session = entry.sessionId ? sessionById.get(entry.sessionId) : undefined;
+    if (!session) return { date: entry.date, status: entry.status };
+
+    // A session where most of the laid-out work never happened earns the same
+    // credit as one that was deliberately shortened, not a full one.
+    const mechanics = sessionMechanics(session, plannedSetsByDay.get(entry.routineDayId ?? '') ?? null);
+    const intent = session.intent === 'full' && wasReduced(mechanics) ? 'reduced' : session.intent;
+    return { date: entry.date, status: entry.status, intent };
+  });
 }
 
 function toReadinessPoints(checkins: DailyCheckin[]): ReadinessPoint[] {
@@ -127,7 +146,7 @@ function toReadinessPoints(checkins: DailyCheckin[]): ReadinessPoint[] {
 export function buildMomentumSeries(input: EngineInput): MomentumSnapshot[] {
   const sessions = completedSessions(input.sessions);
   const summaries = sessions.map(toSessionSummary);
-  const outcomes = toPlannedOutcomes(input.plannedSessions, input.sessions);
+  const outcomes = toPlannedOutcomes(input.plannedSessions, input.sessions, input.routines);
   const readiness = toReadinessPoints(input.checkins);
 
   const firstDates = [
@@ -397,6 +416,18 @@ export function runEngine(input: EngineInput): EngineResult {
 
   const projection = projectionInput ? projectPlan(projectionInput) : null;
 
+  const adaptation = adaptToday({
+    momentum: momentum?.score ?? null,
+    readiness: readiness.score,
+    readinessVsBaseline: readiness.vsBaseline,
+    sessionsThisWeek: week.completed,
+    targetSessionsPerWeek: input.training.preferredDaysPerWeek,
+    missedThisWeek: missedThisWeek.length,
+    daysSinceLastSession,
+  });
+
+  const drift = buildDrift(trajectory);
+
   return {
     momentumSeries,
     momentum,
@@ -410,10 +441,38 @@ export function runEngine(input: EngineInput): EngineResult {
     projection,
     projectionInput,
     adherenceRate,
+    adaptation,
+    drift,
     week,
     lastSession,
     daysSinceLastSession,
     nextPlanned,
+  };
+}
+
+/**
+ * Turns the raw drift number into something a person can act on. Losing pace is
+ * not the same as losing progress, and the copy has to say so — that difference
+ * is the whole reason someone keeps going after a bad week.
+ */
+function buildDrift(trajectory: TrajectoryResult | null): EngineResult['drift'] {
+  if (!trajectory || trajectory.driftDays === 0) return null;
+
+  if (trajectory.driftDays > 0) {
+    return {
+      days: trajectory.driftDays,
+      headline: `Target moved ${trajectory.driftDays} day${trajectory.driftDays === 1 ? '' : 's'} later`,
+      detail:
+        trajectory.recoverableDays > 0
+          ? `You have not lost the work you did — only the pace. Three weeks at your target frequency pulls about ${trajectory.recoverableDays} days back.`
+          : 'You have not lost the work you did — only the pace.',
+    };
+  }
+
+  return {
+    days: trajectory.driftDays,
+    headline: `Target moved ${Math.abs(trajectory.driftDays)} day${trajectory.driftDays === -1 ? '' : 's'} earlier`,
+    detail: 'You are ahead of the pace the plan assumed.',
   };
 }
 

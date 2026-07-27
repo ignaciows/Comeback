@@ -7,9 +7,9 @@ import { ActionBar, SecondaryButton, TextButton } from '@/components/Button';
 import { EmptyState, Note, StatusPill } from '@/components/Feedback';
 import { Header } from '@/components/Header';
 import { Input } from '@/components/Input';
-import { Metric } from '@/components/Metric';
+import { Metric, MetricRow } from '@/components/Metric';
 import { Screen } from '@/components/Screen';
-import { Section } from '@/components/Section';
+import { Divider, Section } from '@/components/Section';
 import { Text } from '@/design-system/Text';
 import { spacing } from '@/design-system/tokens';
 import { exerciseName } from '@/data/exercises';
@@ -19,6 +19,7 @@ import {
   sessionSetCount,
   sessionVolume,
 } from '@/domain/training/metrics';
+import { sessionMechanics } from '@/domain/training/sessionMetrics';
 import { formatPreviousSet, previousPerformance } from '@/features/training/history';
 import { SetRow } from '@/features/training/SetRow';
 import { useSession } from '@/store/hooks';
@@ -49,6 +50,8 @@ export default function WorkoutDetailScreen() {
     );
   }
 
+  const mechanics = sessionMechanics(session);
+
   const bestSets = session.exercises.map((exercise) => {
     const best = exercise.sets
       .filter((set) => !set.warmup)
@@ -78,6 +81,20 @@ export default function WorkoutDetailScreen() {
             intent="neutral"
           />
         </View>
+      </Section>
+
+      <Section title="How it went" footnote="Derived from when each set was confirmed.">
+        <MetricRow
+          label="Rest between sets"
+          value={mechanics.medianRestSeconds === null ? '—' : `${mechanics.medianRestSeconds}s`}
+        />
+        <Divider />
+        <MetricRow label="Pauses over five minutes" value={`${mechanics.pauses}`} />
+        <Divider />
+        <MetricRow
+          label="Sets per hour"
+          value={mechanics.setsPerHour === null ? '—' : `${mechanics.setsPerHour}`}
+        />
       </Section>
 
       {session.exercises.map((exercise) => {

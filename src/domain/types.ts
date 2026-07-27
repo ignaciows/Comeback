@@ -36,6 +36,11 @@ export type NutritionStrategy =
   | 'maintain'
   | 'lean_bulk'
   | 'bulk';
+
+/** What the user wants. The strategy above is derived from these three. */
+export type PlanObjective = 'build' | 'lean' | 'recomp';
+export type PlanSpeed = 'cautious' | 'steady' | 'fast' | 'max';
+export type FatTolerance = 'minimal' | 'some' | 'whatever';
 export type TrainingLocation = 'gym' | 'home';
 export type UnitSystem = 'metric' | 'imperial';
 
@@ -94,7 +99,11 @@ export interface Profile {
 export interface Goal {
   id: UUID;
   type: GoalType;
-  /** Current eating strategy; drives every projection. */
+  /** What you want, how fast, and how much fat you will accept getting there. */
+  objective: PlanObjective;
+  speed: PlanSpeed;
+  fatTolerance: FatTolerance;
+  /** Derived from the three above. Drives every projection. */
   strategy: NutritionStrategy;
   targetWeightKg: number | null;
   proteinTargetG: number | null;

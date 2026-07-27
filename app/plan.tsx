@@ -1,328 +1,409 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
-import { ConfirmationSheet } from '@/components/BottomSheet';
+import { PrimaryButton } from '@/components/Button';
 import { EmptyState, Note, StatusPill } from '@/components/Feedback';
 import { Header } from '@/components/Header';
 import { NumberInput } from '@/components/Input';
-import { Metric, MetricRow } from '@/components/Metric';
+import { MetricRow } from '@/components/Metric';
+import { AnimatedNumber } from '@/components/motion/AnimatedNumber';
 import { Reveal } from '@/components/motion/Reveal';
 import { Screen } from '@/components/Screen';
 import { Divider, Section } from '@/components/Section';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Label, Text } from '@/design-system/Text';
-import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
+import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { PROJECTION_CAVEAT } from '@/data/trainingPrinciples';
-import { compareStrategies } from '@/domain/plan/projection';
-import { STRATEGY_ORDER, strategyProfile } from '@/domain/plan/strategies';
-import type { NutritionStrategy } from '@/domain/types';
-import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
-import { useEngine } from '@/store/hooks';
+import {
+  FAT_TOLERANCE_LABELS,
+  OBJECTIVE_LABELS,
+  SPEEDS,
+  SPEED_LABELS,
+  compareSpeeds,
+  simulatePlan,
+  suggestTargetWeight,
+  type SimulationInput,
+} from '@/domain/plan/simulate';
+import type { FatTolerance, PlanObjective, PlanSpeed } from '@/domain/types';
+import { useBodyWeightSeries, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
-import { formatLongDate, formatShortDate } from '@/utils/date';
+import { formatLongDate } from '@/utils/date';
+import { today as todayOf } from '@/utils/date';
+
+const HORIZONS = [6, 12, 24];
 
 /**
- * Change the plan, at any moment, and see exactly what it costs or saves before
- * committing. Everything already logged carries over — switching strategy does
- * not restart anything.
+ * The plan simulator.
+ *
+ * You choose the outcome — what you want, how fast, how much fat you will
+ * accept — and the app works out what that takes: how many sessions a week,
+ * how many calories, how long it lasts. Nothing here asks you to know training
+ * theory; it shows the consequences of each choice and lets you pick.
  */
 export default function PlanScreen() {
   const router = useRouter();
   const engine = useEngine();
   const goal = useAppStore((state) => state.goal);
-  const phases = useAppStore((state) => state.phases);
-  const changeStrategy = useAppStore((state) => state.changeStrategy);
-  const updateGoal = useAppStore((state) => state.updateGoal);
+  const profile = useAppStore((state) => state.profile);
+  const applyPlanIntent = useAppStore((state) => state.applyPlanIntent);
+  const weights = useBodyWeightSeries();
 
-  const [pending, setPending] = useState<NutritionStrategy | null>(null);
-  const [targetWeight, setTargetWeight] = useState<number | null>(goal?.targetWeightKg ?? null);
+  const [objective, setObjective] = useState<PlanObjective>(goal?.objective ?? 'build');
+  const [speed, setSpeed] = useState<PlanSpeed>(goal?.speed ?? 'steady');
+  const [fatTolerance, setFatTolerance] = useState<FatTolerance>(goal?.fatTolerance ?? 'some');
+  const [horizonWeeks, setHorizonWeeks] = useState(12);
+  const [targetWeightKg, setTargetWeightKg] = useState<number | null>(goal?.targetWeightKg ?? null);
 
-  const comparisons = useMemo(
-    () =>
-      engine.projectionInput
-        ? compareStrategies(engine.projectionInput, STRATEGY_ORDER)
-        : [],
-    [engine.projectionInput],
-  );
+  const latestWeight = weights[weights.length - 1]?.weightKg ?? null;
 
-  const current = engine.projection;
+  const input: SimulationInput | null = useMemo(() => {
+    if (!profile || latestWeight === null) return null;
+    return {
+      today: todayOf(),
+      objective,
+      speed,
+      fatTolerance,
+      currentWeightKg: latestWeight,
+      heightCm: profile.heightCm,
+      age: profile.age ?? 30,
+      sex: profile.sex,
+      experience: profile.experience,
+      targetWeightKg,
+      horizonWeeks,
+      sessionsCompleted: engine.projection?.sessionsCompleted ?? 0,
+      goalStartedAt: goal?.startedAt ?? todayOf(),
+      observedWeeklyRateKg: engine.projectionInput?.observedWeeklyRateKg ?? null,
+      weeksOfWeightData: engine.projectionInput?.weeksOfWeightData ?? 0,
+      adherence: engine.adherenceRate,
+    };
+  }, [profile, latestWeight, objective, speed, fatTolerance, targetWeightKg, horizonWeeks, engine, goal]);
 
-  if (!goal || !current) {
+  const simulation = useMemo(() => (input ? simulatePlan(input) : null), [input]);
+  const speedOptions = useMemo(() => (input ? compareSpeeds(input) : []), [input]);
+
+  if (!profile || latestWeight === null || !simulation || !input) {
     return (
       <Screen>
         <Header title="Plan" leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }} />
         <EmptyState
-          title="No plan yet"
-          description="Log your body weight and finish onboarding, and the plan projections start from your own numbers."
+          title="Log your weight first"
+          description="The plan is calculated from your own numbers, so it needs a starting weight."
           action={{ label: 'Log weight', onPress: () => router.push('/log-weight') }}
         />
       </Screen>
     );
   }
 
-  const currentProfile = strategyProfile(goal.strategy);
-  const pendingComparison = comparisons.find((entry) => entry.strategy === pending);
+  const suggested = suggestTargetWeight({ ...input });
+  const gaining = simulation.outcome.weightChangeKg > 0;
+  const changed =
+    objective !== goal?.objective || speed !== goal?.speed || fatTolerance !== goal?.fatTolerance;
 
   return (
     <Screen>
       <Header
         title="Plan"
-        subtitle={currentProfile.label}
+        subtitle={simulation.strategyLabel}
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
-        trailing={<StatusPill label={`${current.confidence} confidence`} tone="neutral" />}
       />
 
+      {/* 1. What do you want. */}
       <Reveal index={0}>
-        <Section>
-          <MilestoneTrack
-            completed={current.sessionsCompleted}
-            remaining={current.sessionsRemaining}
-            targetLabel={goal.targetWeightKg ? `${goal.targetWeightKg.toFixed(1)} kg` : 'no target set'}
-            footnote={current.targetDate ? `Estimated ${formatLongDate(current.targetDate)}` : undefined}
+        <Section title="What do you want">
+          <SegmentedControl
+            options={(Object.keys(OBJECTIVE_LABELS) as PlanObjective[]).map((value) => ({
+              value,
+              label: OBJECTIVE_LABELS[value],
+            }))}
+            value={objective}
+            onChange={(value) => {
+              Haptics.selectionAsync();
+              setObjective(value);
+            }}
+            layout="wrap"
           />
         </Section>
       </Reveal>
 
+      {/* 2. How fast. */}
       <Reveal index={1}>
-        <Section title="Where this leads" footnote={current.explanation}>
-          <View style={styles.metrics}>
-            <Metric
-              label="Days left"
-              value={current.daysRemaining === null ? '—' : `${current.daysRemaining}`}
-              caption={current.targetDate ? formatLongDate(current.targetDate) : 'No target weight'}
-            />
-            <Metric
-              label="Weekly rate"
-              value={`${current.weeklyRateKg > 0 ? '+' : ''}${current.weeklyRateKg.toFixed(2)}`}
-              unit="kg"
-              size="small"
-              intent="neutral"
-            />
-          </View>
+        <Section title="How fast">
+          <SegmentedControl
+            options={SPEEDS.map((value) => ({ value, label: SPEED_LABELS[value] }))}
+            value={speed}
+            onChange={(value) => {
+              Haptics.selectionAsync();
+              setSpeed(value);
+            }}
+            layout="wrap"
+          />
         </Section>
       </Reveal>
 
-      {current.milestones.length > 0 ? (
+      {/* 3. Only asked when it changes anything. */}
+      {objective !== 'lean' ? (
         <Reveal index={2}>
-          <Section title="Milestones" footnote="Estimated dates at the current rate. They move as you log data.">
-            {current.milestones.map((milestone, index) => (
-              <View key={milestone.key}>
-                {index > 0 ? <Divider /> : null}
-                <MetricRow
-                  label={milestone.label}
-                  detail={`${formatShortDate(milestone.date)} · in ${milestone.inDays} days`}
-                  value={`${milestone.weightKg.toFixed(1)} kg`}
-                />
-              </View>
-            ))}
+          <Section title="Fat you will accept">
+            <SegmentedControl
+              options={(Object.keys(FAT_TOLERANCE_LABELS) as FatTolerance[]).map((value) => ({
+                value,
+                label: FAT_TOLERANCE_LABELS[value],
+              }))}
+              value={fatTolerance}
+              onChange={(value) => {
+                Haptics.selectionAsync();
+                setFatTolerance(value);
+              }}
+              layout="wrap"
+            />
           </Section>
         </Reveal>
       ) : null}
 
+      {/* The answer. */}
       <Reveal index={3}>
-        <Section
-          title="Estimated composition"
-          footnote="Split of the projected weight change, from the strategy's typical ratio."
-        >
-          <MetricRow
-            label="Lean mass"
-            value={current.leanChangeKg === null ? '—' : `${current.leanChangeKg > 0 ? '+' : ''}${current.leanChangeKg} kg`}
-          />
-          <Divider />
-          <MetricRow
-            label="Fat mass"
-            value={current.fatChangeKg === null ? '—' : `${current.fatChangeKg > 0 ? '+' : ''}${current.fatChangeKg} kg`}
-          />
-          <Divider />
-          <MetricRow
-            label="Muscle your training can add"
-            detail="Ceiling set by training age, independent of the scale"
-            value={current.muscleCeilingKg === null ? '—' : `${current.muscleCeilingKg} kg`}
-          />
-        </Section>
+        <View style={styles.hero}>
+          <View style={styles.heroHead}>
+            <Label>{`In ${horizonWeeks} weeks`}</Label>
+            <StatusPill
+              label={
+                simulation.feasibility === 'not_useful'
+                  ? 'too fast to be useful'
+                  : simulation.feasibility === 'demanding'
+                    ? 'demanding'
+                    : 'sustainable'
+              }
+              tone={
+                simulation.feasibility === 'not_useful'
+                  ? 'danger'
+                  : simulation.feasibility === 'demanding'
+                    ? 'warning'
+                    : 'accent'
+              }
+            />
+          </View>
+
+          <View style={styles.heroValue}>
+            <AnimatedNumber
+              value={simulation.outcome.weightChangeKg}
+              decimals={1}
+              prefix={gaining ? '+' : ''}
+              variant="display"
+            />
+            <Text variant="title" tone="tertiary">
+              kg
+            </Text>
+          </View>
+
+          <Text variant="body" tone="secondary" style={styles.heroLine}>
+            {gaining
+              ? `About ${Math.abs(simulation.outcome.leanChangeKg)} kg lean, ${Math.abs(simulation.outcome.fatChangeKg)} kg fat`
+              : `About ${Math.abs(simulation.outcome.fatChangeKg)} kg fat, ${Math.abs(simulation.outcome.leanChangeKg)} kg lean`}
+          </Text>
+
+          {simulation.projection.targetDate ? (
+            <View style={styles.heroTarget}>
+              <Text variant="bodySmall" tone="tertiary">
+                {`Target ${targetWeightKg?.toFixed(1) ?? suggested.toFixed(1)} kg reached around `}
+                <Text variant="bodySmall">{formatLongDate(simulation.projection.targetDate)}</Text>
+                {` · ${simulation.projection.daysRemaining} days`}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.horizons}>
+            {HORIZONS.map((weeks) => (
+              <Text
+                key={weeks}
+                variant="caption"
+                tone={weeks === horizonWeeks ? 'accent' : 'tertiary'}
+                onPress={() => setHorizonWeeks(weeks)}
+                style={styles.horizon}
+              >
+                {`${weeks} weeks`}
+              </Text>
+            ))}
+          </View>
+        </View>
       </Reveal>
 
+      {/* What it takes. */}
       <Reveal index={4}>
-        <Section title="Daily targets" footnote="Calories are an estimate from height, weight and training frequency.">
-          <MetricRow label="Maintenance" value={`${current.maintenanceKcal} kcal`} />
-          <Divider />
-          <MetricRow
-            label="Target intake"
-            detail={`${Math.round(currentProfile.energyBalancePct * 100)}% of maintenance`}
-            value={`${current.targetKcal} kcal`}
-          />
-          <Divider />
-          <MetricRow
-            label="Protein"
-            value={`${current.proteinTargetG[0]}–${current.proteinTargetG[1]} g`}
-          />
+        <Section title="What this needs from you">
+          {simulation.requirements.map((requirement) => (
+            <View key={requirement.key} style={styles.bullet}>
+              <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+              <Text variant="bodySmall" style={styles.bulletText}>
+                {requirement.label}
+              </Text>
+            </View>
+          ))}
         </Section>
       </Reveal>
 
       <Reveal index={5}>
-        <Section title="Target weight">
+        <Section title="What it costs">
+          {simulation.tradeoffs.map((tradeoff) => (
+            <View key={tradeoff.key} style={styles.bullet}>
+              <View style={[styles.dot, { backgroundColor: colors.warning }]} />
+              <Text variant="bodySmall" tone="secondary" style={styles.bulletText}>
+                {tradeoff.label}
+              </Text>
+            </View>
+          ))}
+        </Section>
+      </Reveal>
+
+      {/* Every pace, side by side. */}
+      <Reveal index={6}>
+        <Section title="Every pace" footnote="Days to your target, and what each one asks for.">
+          {speedOptions.map((option, index) => (
+            <View key={option.speed}>
+              {index > 0 ? <Divider /> : null}
+              <MetricRow
+                label={SPEED_LABELS[option.speed]}
+                detail={`${option.result.daysPerWeek} sessions a week · ${option.result.macros.kcal} kcal`}
+                value={
+                  option.result.projection.daysRemaining === null
+                    ? '—'
+                    : `${option.result.projection.daysRemaining}d`
+                }
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSpeed(option.speed);
+                }}
+              />
+            </View>
+          ))}
+        </Section>
+      </Reveal>
+
+      {/* Macros. */}
+      <Reveal index={7}>
+        <Section title="Daily macros" footnote="Protein from body weight, fat at 25 % of intake, carbohydrate takes the rest.">
+          <View style={styles.macros}>
+            <Macro label="Calories" value={simulation.macros.kcal} unit="kcal" />
+            <Macro label="Protein" value={simulation.macros.proteinG} unit="g" />
+            <Macro label="Carbs" value={simulation.macros.carbsG} unit="g" />
+            <Macro label="Fat" value={simulation.macros.fatG} unit="g" />
+          </View>
+        </Section>
+      </Reveal>
+
+      <Reveal index={8}>
+        <Section title="Target weight" footnote="Leave it and the app uses the one this pace reaches.">
           <NumberInput
-            value={targetWeight}
-            onChange={(value) => {
-              setTargetWeight(value);
-              updateGoal({ targetWeightKg: value });
-            }}
+            value={targetWeightKg ?? suggested}
+            onChange={setTargetWeightKg}
             suffix="kg"
             step={0.5}
             precision={1}
-            hint="Everything above recalculates from this."
           />
         </Section>
       </Reveal>
 
-      <Reveal index={6}>
-        <Section
-          title="Change strategy"
-          footnote="Progress you have already made carries over. Switching never resets your history."
-        >
-          {comparisons.map((entry) => {
-            const profile = strategyProfile(entry.strategy);
-            const active = entry.strategy === goal.strategy;
-            return (
-              <Pressable
-                key={entry.strategy}
-                onPress={() => {
-                  if (active) return;
-                  Haptics.selectionAsync();
-                  setPending(entry.strategy);
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                style={({ pressed }) => [
-                  styles.option,
-                  active && styles.optionActive,
-                  pressed && { opacity: opacity.pressed },
-                ]}
-              >
-                <View style={styles.optionHead}>
-                  <Text variant="heading">{profile.label}</Text>
-                  {active ? (
-                    <StatusPill label="Current" tone="accent" />
-                  ) : entry.deltaDays === null ? (
-                    <Text variant="caption" tone="tertiary">
-                      No date
-                    </Text>
-                  ) : (
-                    <Text
-                      variant="caption"
-                      mono
-                      style={{ color: entry.deltaDays <= 0 ? colors.accent : colors.warning }}
-                    >
-                      {`${entry.deltaDays > 0 ? '+' : ''}${entry.deltaDays}d`}
-                    </Text>
-                  )}
-                </View>
-                <Text variant="bodySmall" tone="secondary" style={styles.optionSummary}>
-                  {profile.summary}
-                </Text>
-                <View style={styles.optionMeta}>
-                  <Text variant="caption" tone="tertiary">
-                    {entry.projection.targetDate
-                      ? `Target ${formatShortDate(entry.projection.targetDate)}`
-                      : 'Does not reach your target'}
-                  </Text>
-                  <Text variant="caption" tone="tertiary">
-                    {`${entry.projection.targetKcal} kcal`}
-                  </Text>
-                </View>
-                <Text variant="caption" tone="tertiary" style={styles.tradeoff}>
-                  {profile.tradeoff}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </Section>
-      </Reveal>
-
-      {phases.length > 0 ? (
-        <Reveal index={7}>
-          <Section title="History">
-            {[...phases].reverse().map((phase, index) => (
-              <View key={phase.id}>
-                {index > 0 ? <Divider /> : null}
-                <MetricRow
-                  label={strategyProfile(phase.strategy).label}
-                  detail={`${formatShortDate(phase.startedAt)} → ${phase.endedAt ? formatShortDate(phase.endedAt) : 'now'}`}
-                  value={
-                    phase.endWeightKg !== null && phase.startWeightKg > 0
-                      ? `${phase.endWeightKg - phase.startWeightKg > 0 ? '+' : ''}${(phase.endWeightKg - phase.startWeightKg).toFixed(1)} kg`
-                      : ''
-                  }
-                />
-              </View>
-            ))}
-          </Section>
-        </Reveal>
-      ) : null}
-
-      <Note>{PROJECTION_CAVEAT}</Note>
-      <MetricRow label="How these numbers are built" onPress={() => router.push('/method')} chevron />
-
-      <ConfirmationSheet
-        visible={pending !== null}
-        onClose={() => setPending(null)}
-        title={pending ? `Switch to ${strategyProfile(pending).label}` : ''}
-        message={
-          pendingComparison
-            ? `${strategyProfile(pendingComparison.strategy).tradeoff}\n\n${
-                pendingComparison.projection.targetDate
-                  ? `New estimated target: ${formatLongDate(pendingComparison.projection.targetDate)}${
-                      pendingComparison.deltaDays === null
-                        ? ''
-                        : ` (${pendingComparison.deltaDays > 0 ? '+' : ''}${pendingComparison.deltaDays} days)`
-                    }. Your ${current.sessionsCompleted} logged sessions carry over.`
-                  : 'This strategy does not move you towards your current target weight.'
-              }`
-            : ''
-        }
-        confirmLabel="Switch"
-        onConfirm={() => {
-          if (!pending) return;
-          changeStrategy(pending);
+      <PrimaryButton
+        label={changed ? 'Use this plan' : 'Plan is up to date'}
+        disabled={!changed && targetWeightKg === goal?.targetWeightKg}
+        onPress={() => {
+          applyPlanIntent({
+            objective,
+            speed,
+            fatTolerance,
+            targetWeightKg: targetWeightKg ?? suggested,
+            horizonWeeks,
+          });
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          router.back();
         }}
       />
+
+      <Note style={styles.note}>{PROJECTION_CAVEAT}</Note>
+      <MetricRow label="How these numbers are built" onPress={() => router.push('/method')} chevron />
     </Screen>
   );
 }
 
+function Macro({ label, value, unit }: { label: string; value: number; unit: string }) {
+  return (
+    <View style={styles.macro}>
+      <Label>{label}</Label>
+      <View style={styles.macroValue}>
+        <AnimatedNumber value={value} variant="metricSmall" />
+        <Text variant="caption" tone="tertiary">
+          {unit}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  metrics: {
-    flexDirection: 'row',
-    gap: spacing.xxl,
-  },
-  option: {
-    padding: spacing.lg,
-    borderRadius: radius.lg,
+  hero: {
+    borderRadius: radius.xl,
     borderWidth: borderWidth.hairline,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    marginBottom: spacing.md,
+    padding: spacing.xl,
+    marginBottom: spacing.xxl,
   },
-  optionActive: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
-  },
-  optionHead: {
+  heroHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  optionSummary: {
-    marginTop: spacing.xs,
-  },
-  optionMeta: {
+  heroValue: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    gap: spacing.sm,
     marginTop: spacing.md,
   },
-  tradeoff: {
-    marginTop: spacing.sm,
+  heroLine: {
+    marginTop: spacing.xs,
+  },
+  heroTarget: {
+    marginTop: spacing.lg,
+  },
+  horizons: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  horizon: {
+    paddingVertical: spacing.xs,
+  },
+  bullet: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 7,
+  },
+  bulletText: {
+    flex: 1,
+  },
+  macros: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: spacing.lg,
+  },
+  macro: {
+    width: '50%',
+    gap: 2,
+  },
+  macroValue: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+  },
+  note: {
+    marginTop: spacing.xl,
   },
 });

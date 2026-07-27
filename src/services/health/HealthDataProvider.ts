@@ -31,7 +31,38 @@ export type CardiovascularSample = {
   source: DataSource;
 };
 
-export type HealthCapability = 'sleep' | 'bodyComposition' | 'cardiovascular';
+/**
+ * A workout as the watch recorded it. Comeback already derives duration, rest
+ * and pauses from set timestamps (`domain/training/sessionMetrics`); when a
+ * watch is connected these measured values replace the derived ones and
+ * nothing downstream changes.
+ */
+export type WorkoutSample = {
+  date: ISODate;
+  startedAt: string;
+  endedAt: string;
+  activeEnergyKcal: number | null;
+  averageHeartRate: number | null;
+  maxHeartRate: number | null;
+  source: DataSource;
+};
+
+/** Daily movement, for reading how much the day already took out of you. */
+export type ActivitySample = {
+  date: ISODate;
+  steps: number | null;
+  activeEnergyKcal: number | null;
+  exerciseMinutes: number | null;
+  standHours: number | null;
+  source: DataSource;
+};
+
+export type HealthCapability =
+  | 'sleep'
+  | 'bodyComposition'
+  | 'cardiovascular'
+  | 'workouts'
+  | 'activity';
 
 export interface HealthDataProvider {
   readonly id: DataSource;
@@ -43,6 +74,8 @@ export interface HealthDataProvider {
   getSleep(from: ISODate, to: ISODate): Promise<SleepSample[]>;
   getBodyComposition(from: ISODate, to: ISODate): Promise<BodyCompositionSample[]>;
   getCardiovascular(from: ISODate, to: ISODate): Promise<CardiovascularSample[]>;
+  getWorkouts(from: ISODate, to: ISODate): Promise<WorkoutSample[]>;
+  getActivity(from: ISODate, to: ISODate): Promise<ActivitySample[]>;
 }
 
 type ManualSources = {
@@ -88,6 +121,14 @@ export function createManualHealthDataProvider(sources: ManualSources): HealthDa
       // honest answer, not a zero.
       return [];
     },
+    async getWorkouts() {
+      // Sessions logged in the app are not device workouts; the session's own
+      // mechanics cover this until a watch is connected.
+      return [];
+    },
+    async getActivity() {
+      return [];
+    },
   };
 }
 
@@ -107,7 +148,18 @@ export function listHealthProviders(): HealthDataProvider[] {
 
 /** Sources the product intends to support, shown as pending in Profile. */
 export const PLANNED_HEALTH_SOURCES: { id: DataSource; label: string; note: string }[] = [
-  { id: 'apple_health', label: 'Apple Health', note: 'Sleep and body weight' },
-  { id: 'apple_watch', label: 'Apple Watch', note: 'Sleep, heart rate, HRV' },
+  { id: 'apple_health', label: 'Apple Health', note: 'Sleep, steps, body weight' },
+  {
+    id: 'apple_watch',
+    label: 'Apple Watch',
+    note: 'Workout duration, heart rate, HRV, daily movement',
+  },
   { id: 'renpho', label: 'Renpho', note: 'Body weight and composition' },
 ];
+
+/**
+ * These need native modules, so they only work in a development or production
+ * build — not in Expo Go. The interfaces above are ready; what is missing is
+ * the build, not the code around them.
+ */
+export const REQUIRES_NATIVE_BUILD = true;

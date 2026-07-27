@@ -2,60 +2,58 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
 
 import { ActionBar, PrimaryButton, TextButton } from '@/components/Button';
-import { Note } from '@/components/Feedback';
+import { Note, StatusPill } from '@/components/Feedback';
 import { NumberInput } from '@/components/Input';
 import { MetricRow } from '@/components/Metric';
 import { Reveal } from '@/components/motion/Reveal';
 import { Screen } from '@/components/Screen';
 import { Divider, Section } from '@/components/Section';
 import { Label, Text } from '@/design-system/Text';
-import { motion, useLoop } from '@/design-system/motion';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
-import { exerciseName } from '@/data/exercises';
-import { buildInitialRoutine, estimateRoutineDayMinutes, firstBlockObjective } from '@/data/routineTemplates';
-import { projectPlan } from '@/domain/plan/projection';
-import { defaultStrategyFor, strategyProfile } from '@/domain/plan/strategies';
-import type { GoalType } from '@/domain/types';
+import { buildInitialRoutine, estimateRoutineDayMinutes } from '@/data/routineTemplates';
+import {
+  OBJECTIVE_LABELS,
+  SPEEDS,
+  SPEED_LABELS,
+  simulatePlan,
+  suggestTargetWeight,
+  type SimulationInput,
+} from '@/domain/plan/simulate';
+import type { FatTolerance, GoalType, PlanObjective, PlanSpeed } from '@/domain/types';
 import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
-import { useAppStore, type OnboardingPayload } from '@/store/useAppStore';
+import { useAppStore, WEEKDAYS_FOR, type OnboardingPayload } from '@/store/useAppStore';
+import { formatLongDate, today } from '@/utils/date';
 import { fieldErrors, quickStartSchema } from './schema';
-import { formatLongDate, today, weekdayLabel } from '@/utils/date';
-import { round } from '@/utils/math';
 
 /**
- * Four inputs and you are training: goal, weight, height, days per week.
+ * Three questions, then the plan.
  *
- * Everything else has a defensible default and is editable in Profile. The
- * point of onboarding is to get to a real first session, not to interview the
- * user before letting them in.
+ * The app never asks how many days a week you can train or what to eat — those
+ * are consequences of what you want and how fast, so it works them out. The
+ * pace screen shows each option's result before you pick it, so the decision is
+ * made with the numbers already in front of you.
  */
 
-const GOALS: { value: GoalType; label: string; detail: string }[] = [
-  { value: 'recomposition', label: 'Recomposition', detail: 'Muscle up, fat down' },
-  { value: 'build_muscle', label: 'Build muscle', detail: 'Add size' },
-  { value: 'lose_fat', label: 'Lose fat', detail: 'Lean out, keep strength' },
-  { value: 'regain_condition', label: 'Regain condition', detail: 'Get back to where you were' },
-  { value: 'build_strength', label: 'Build strength', detail: 'Heavier main lifts' },
-  { value: 'maintain', label: 'Maintain', detail: 'Hold what you have' },
+const OBJECTIVES: { value: PlanObjective; goalType: GoalType; label: string; detail: string }[] = [
+  { value: 'build', goalType: 'build_muscle', label: OBJECTIVE_LABELS.build, detail: 'Get bigger and stronger' },
+  { value: 'lean', goalType: 'lose_fat', label: OBJECTIVE_LABELS.lean, detail: 'Lose fat, keep your strength' },
+  {
+    value: 'recomp',
+    goalType: 'recomposition',
+    label: OBJECTIVE_LABELS.recomp,
+    detail: 'Muscle up and fat down together',
+  },
 ];
-
-/** Sensible spread of training days for each weekly frequency. */
-const WEEKDAYS_FOR: Record<number, number[]> = {
-  3: [1, 3, 5],
-  4: [1, 2, 4, 5],
-  5: [1, 2, 3, 5, 6],
-  6: [1, 2, 3, 4, 5, 6],
-};
 
 const DEFAULTS = {
   sessionMinutes: 60,
-  horizonWeeks: 16,
+  horizonWeeks: 12,
   layoffWeeks: 4,
   experience: 'returning' as const,
   location: 'gym' as const,
+  fatTolerance: 'some' as FatTolerance,
 };
 
 type Step = 0 | 1 | 2 | 3;
@@ -63,89 +61,86 @@ type Step = 0 | 1 | 2 | 3;
 export function OnboardingFlow() {
   const router = useRouter();
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
-  const beat = useLoop(motion.loop.heartbeat);
 
   const [step, setStep] = useState<Step>(0);
-  const [goalType, setGoalType] = useState<GoalType | null>(null);
+  const [objective, setObjective] = useState<PlanObjective | null>(null);
   const [weightKg, setWeightKg] = useState<number | null>(null);
   const [heightCm, setHeightCm] = useState<number | null>(null);
-  const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
+  const [speed, setSpeed] = useState<PlanSpeed | null>(null);
   const [targetWeightKg, setTargetWeightKg] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const strategy = goalType ? defaultStrategyFor(goalType) : null;
-
-  /** Target that the chosen strategy reaches in the default horizon. */
-  const suggestedTarget = useMemo(() => {
-    if (!strategy || weightKg === null) return null;
-    const rate = strategyProfile(strategy).weeklyWeightChangePct * weightKg;
-    return round(weightKg + rate * DEFAULTS.horizonWeeks, 1);
-  }, [strategy, weightKg]);
-
-  const routine = useMemo(() => {
-    if (!goalType || !daysPerWeek) return null;
-    return buildInitialRoutine({
-      daysPerWeek,
-      sessionMinutes: DEFAULTS.sessionMinutes,
-      location: DEFAULTS.location,
-      goalType,
-      layoffWeeks: DEFAULTS.layoffWeeks,
-    });
-  }, [goalType, daysPerWeek]);
-
-  const projection = useMemo(() => {
-    if (!strategy || weightKg === null || heightCm === null || !daysPerWeek) return null;
-    return projectPlan({
+  const baseInput = useMemo((): Omit<SimulationInput, 'speed' | 'targetWeightKg'> | null => {
+    if (!objective || weightKg === null || heightCm === null) return null;
+    return {
       today: today(),
-      strategy,
-      experience: DEFAULTS.experience,
+      objective,
+      fatTolerance: DEFAULTS.fatTolerance,
       currentWeightKg: weightKg,
       heightCm,
       age: 30,
       sex: 'unspecified',
-      targetWeightKg: targetWeightKg ?? suggestedTarget,
-      sessionsPerWeek: daysPerWeek,
+      experience: DEFAULTS.experience,
+      horizonWeeks: DEFAULTS.horizonWeeks,
       sessionsCompleted: 0,
       goalStartedAt: today(),
       observedWeeklyRateKg: null,
       weeksOfWeightData: 0,
       adherence: 1,
-    });
-  }, [strategy, weightKg, heightCm, daysPerWeek, targetWeightKg, suggestedTarget]);
+    };
+  }, [objective, weightKg, heightCm]);
 
-  const pulse = useAnimatedStyle(() => ({
-    opacity: interpolate(beat.value, [0, 1], [0.5, 1]),
-  }));
+  /** Every pace, simulated, so the choice is made with the result visible. */
+  const options = useMemo(() => {
+    if (!baseInput) return [];
+    return SPEEDS.map((value) => ({
+      speed: value,
+      result: simulatePlan({ ...baseInput, speed: value, targetWeightKg: null }),
+    }));
+  }, [baseInput]);
+
+  const chosen = useMemo(() => {
+    if (!baseInput || !speed) return null;
+    const target = targetWeightKg ?? suggestTargetWeight({ ...baseInput, speed });
+    return { target, result: simulatePlan({ ...baseInput, speed, targetWeightKg: target }) };
+  }, [baseInput, speed, targetWeightKg]);
+
+  const routine = useMemo(() => {
+    if (!objective || !chosen) return null;
+    return buildInitialRoutine({
+      daysPerWeek: chosen.result.daysPerWeek,
+      sessionMinutes: DEFAULTS.sessionMinutes,
+      location: DEFAULTS.location,
+      goalType: OBJECTIVES.find((entry) => entry.value === objective)?.goalType ?? 'recomposition',
+      layoffWeeks: DEFAULTS.layoffWeeks,
+    });
+  }, [objective, chosen]);
 
   const advance = (next: Step) => {
     setError(null);
     setStep(next);
   };
 
-  const pick = <T,>(setter: (value: T) => void, value: T, next: Step) => {
-    Haptics.selectionAsync();
-    setter(value);
-    // Choosing is the confirmation; no extra tap to move on.
-    setTimeout(() => advance(next), 140);
-  };
-
   const finish = () => {
-    if (!goalType || weightKg === null || heightCm === null || !daysPerWeek) return;
+    if (!objective || !speed || !chosen || weightKg === null || heightCm === null) return;
     const payload: OnboardingPayload = {
       name: '',
       heightCm,
       weightKg,
       experience: DEFAULTS.experience,
       layoffWeeks: DEFAULTS.layoffWeeks,
-      goalType,
-      strategy: strategy ?? undefined,
-      targetWeightKg: targetWeightKg ?? suggestedTarget,
+      goalType: OBJECTIVES.find((entry) => entry.value === objective)?.goalType ?? 'recomposition',
+      objective,
+      speed,
+      fatTolerance: DEFAULTS.fatTolerance,
+      strategy: chosen.result.strategy,
+      targetWeightKg: chosen.target,
       horizonWeeks: DEFAULTS.horizonWeeks,
-      daysPerWeek,
+      // Frequency is an output of the pace, not a question.
+      daysPerWeek: chosen.result.daysPerWeek,
       sessionMinutes: DEFAULTS.sessionMinutes,
-      preferredWeekdays: WEEKDAYS_FOR[daysPerWeek] ?? WEEKDAYS_FOR[4],
+      preferredWeekdays: WEEKDAYS_FOR[chosen.result.daysPerWeek] ?? WEEKDAYS_FOR[4],
       location: DEFAULTS.location,
-      // No check-in during onboarding; Today asks for it when it matters.
       checkin: {
         sleepHours: null,
         sleepQuality: null,
@@ -174,24 +169,28 @@ export function OnboardingFlow() {
         <Reveal>
           <Label style={styles.kicker}>Comeback</Label>
           <Text variant="title" style={styles.question}>
-            What are you working towards?
+            What do you want?
           </Text>
           <View style={styles.options}>
-            {GOALS.map((goal, index) => (
-              <Reveal key={goal.value} index={index}>
+            {OBJECTIVES.map((entry, index) => (
+              <Reveal key={entry.value} index={index}>
                 <Pressable
-                  onPress={() => pick(setGoalType, goal.value, 1)}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setObjective(entry.value);
+                    setTimeout(() => advance(1), 140);
+                  }}
                   accessibilityRole="radio"
-                  accessibilityState={{ selected: goalType === goal.value }}
+                  accessibilityState={{ selected: objective === entry.value }}
                   style={({ pressed }) => [
                     styles.card,
-                    goalType === goal.value && styles.cardSelected,
+                    objective === entry.value && styles.cardSelected,
                     pressed && { opacity: opacity.pressed },
                   ]}
                 >
-                  <Text variant="heading">{goal.label}</Text>
+                  <Text variant="heading">{entry.label}</Text>
                   <Text variant="bodySmall" tone="secondary">
-                    {goal.detail}
+                    {entry.detail}
                   </Text>
                 </Pressable>
               </Reveal>
@@ -202,29 +201,31 @@ export function OnboardingFlow() {
 
       {step === 1 && (
         <Reveal>
-          <Label style={styles.kicker}>Step 2 of 4</Label>
+          <Label style={styles.kicker}>Step 2 of 3</Label>
           <Text variant="title" style={styles.question}>
             Where are you starting?
           </Text>
-          <NumberInput
-            label="Body weight"
-            value={weightKg}
-            onChange={setWeightKg}
-            suffix="kg"
-            step={0.25}
-            precision={2}
-            placeholder="77.25"
-            style={styles.field}
-          />
-          <NumberInput
-            label="Height"
-            value={heightCm}
-            onChange={setHeightCm}
-            suffix="cm"
-            step={1}
-            precision={0}
-            placeholder="186"
-          />
+          <View style={styles.fields}>
+            <NumberInput
+              label="Body weight"
+              value={weightKg}
+              onChange={setWeightKg}
+              suffix="kg"
+              step={0.25}
+              precision={2}
+              placeholder="77.25"
+              style={styles.field}
+            />
+            <NumberInput
+              label="Height"
+              value={heightCm}
+              onChange={setHeightCm}
+              suffix="cm"
+              step={1}
+              precision={0}
+              placeholder="186"
+            />
+          </View>
           {error ? (
             <Text variant="caption" tone="danger" style={styles.error}>
               {error}
@@ -239,7 +240,7 @@ export function OnboardingFlow() {
                   .safeParse({ weightKg, heightCm });
                 if (!parsed.success) {
                   const errors = fieldErrors(parsed.error);
-                  setError(errors.weightKg ?? errors.heightCm ?? 'Both values are needed to build your plan.');
+                  setError(errors.weightKg ?? errors.heightCm ?? 'Both are needed to build your plan.');
                   return;
                 }
                 advance(2);
@@ -252,72 +253,121 @@ export function OnboardingFlow() {
 
       {step === 2 && (
         <Reveal>
-          <Label style={styles.kicker}>Step 3 of 4</Label>
+          <Label style={styles.kicker}>Step 3 of 3</Label>
           <Text variant="title" style={styles.question}>
-            How many days a week can you train?
+            How fast do you want it?
+          </Text>
+          <Text variant="bodySmall" tone="secondary" style={styles.subtitle}>
+            {`What each pace gets you in ${DEFAULTS.horizonWeeks} weeks, and what it asks for.`}
           </Text>
           <View style={styles.options}>
-            {[3, 4, 5, 6].map((days, index) => (
-              <Reveal key={days} index={index}>
-                <Pressable
-                  onPress={() => pick(setDaysPerWeek, days, 3)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: daysPerWeek === days }}
-                  style={({ pressed }) => [
-                    styles.card,
-                    styles.cardRow,
-                    daysPerWeek === days && styles.cardSelected,
-                    pressed && { opacity: opacity.pressed },
-                  ]}
-                >
-                  <View>
-                    <Text variant="heading">{`${days} days`}</Text>
-                    <Text variant="bodySmall" tone="secondary">
-                      {(WEEKDAYS_FOR[days] ?? []).map((day) => weekdayLabel(day)).join(' · ')}
+            {options.map((option, index) => {
+              const change = option.result.outcome.weightChangeKg;
+              const gaining = change > 0;
+              return (
+                <Reveal key={option.speed} index={index}>
+                  <Pressable
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      setSpeed(option.speed);
+                      setTimeout(() => advance(3), 140);
+                    }}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: speed === option.speed }}
+                    style={({ pressed }) => [
+                      styles.card,
+                      speed === option.speed && styles.cardSelected,
+                      pressed && { opacity: opacity.pressed },
+                    ]}
+                  >
+                    <View style={styles.cardHead}>
+                      <Text variant="heading">{SPEED_LABELS[option.speed]}</Text>
+                      <Text
+                        variant="heading"
+                        mono
+                        style={{
+                          color:
+                            option.result.feasibility === 'not_useful' ? colors.warning : colors.accent,
+                        }}
+                      >
+                        {`${gaining ? '+' : ''}${change} kg`}
+                      </Text>
+                    </View>
+                    <Text variant="bodySmall" tone="secondary" style={styles.cardLine}>
+                      {gaining
+                        ? `${Math.abs(option.result.outcome.leanChangeKg)} kg lean · ${Math.abs(option.result.outcome.fatChangeKg)} kg fat`
+                        : `${Math.abs(option.result.outcome.fatChangeKg)} kg fat · ${Math.abs(option.result.outcome.leanChangeKg)} kg lean`}
                     </Text>
-                  </View>
-                  <Text variant="caption" tone="tertiary" mono>
-                    {`${days * DEFAULTS.sessionMinutes} min/wk`}
-                  </Text>
-                </Pressable>
-              </Reveal>
-            ))}
+                    <View style={styles.cardFoot}>
+                      <Text variant="caption" tone="tertiary">
+                        {`${option.result.daysPerWeek} days a week · ${option.result.macros.kcal} kcal`}
+                      </Text>
+                      {option.result.feasibility === 'not_useful' ? (
+                        <StatusPill label="mostly fat" tone="warning" />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                </Reveal>
+              );
+            })}
           </View>
           <TextButton label="Back" onPress={() => advance(1)} style={styles.back} />
         </Reveal>
       )}
 
-      {step === 3 && routine && projection && strategy && (
+      {step === 3 && chosen && routine && (
         <>
           <Reveal index={0}>
             <Label style={styles.kicker}>Your plan</Label>
-            <Animated.View style={pulse}>
-              <Text variant="title" style={styles.question}>
-                {routine.name}
-              </Text>
-            </Animated.View>
+            <Text variant="title" style={styles.question}>
+              {routine.name}
+            </Text>
             <Text variant="bodySmall" tone="secondary">
-              {`${routine.daysPerWeek} days a week · ${strategyProfile(strategy).label.toLowerCase()} · about ${DEFAULTS.sessionMinutes} minutes a session`}
+              {`${chosen.result.daysPerWeek} days a week · ${chosen.result.strategyLabel.toLowerCase()} · ${chosen.result.macros.kcal} kcal a day`}
             </Text>
           </Reveal>
 
           <Reveal index={1} style={styles.block}>
             <MilestoneTrack
               completed={0}
-              remaining={projection.sessionsRemaining}
-              targetLabel={
-                (targetWeightKg ?? suggestedTarget) !== null
-                  ? `${(targetWeightKg ?? suggestedTarget)?.toFixed(1)} kg`
-                  : 'no target yet'
+              remaining={chosen.result.projection.sessionsRemaining}
+              targetLabel={`${chosen.target.toFixed(1)} kg`}
+              footnote={
+                chosen.result.projection.targetDate
+                  ? `Estimated ${formatLongDate(chosen.result.projection.targetDate)}`
+                  : undefined
               }
-              footnote={projection.targetDate ? `Estimated ${formatLongDate(projection.targetDate)}` : undefined}
             />
           </Reveal>
 
           <Reveal index={2}>
-            <Section title="Target weight" footnote="Adjust it now or later — the plan recalculates either way.">
+            <Section title="What this needs from you">
+              {chosen.result.requirements.map((requirement) => (
+                <View key={requirement.key} style={styles.bullet}>
+                  <View style={styles.dot} />
+                  <Text variant="bodySmall" style={styles.bulletText}>
+                    {requirement.label}
+                  </Text>
+                </View>
+              ))}
+            </Section>
+          </Reveal>
+
+          <Reveal index={3}>
+            <Section title="Your week">
+              {routine.days.map((day, index) => (
+                <View key={day.id}>
+                  {index > 0 ? <Divider /> : null}
+                  <MetricRow label={day.name} value={`${estimateRoutineDayMinutes(day)}m`} />
+                </View>
+              ))}
+            </Section>
+          </Reveal>
+
+          <Reveal index={4}>
+            <Section title="Target weight" footnote="Change it now or any time from Plan.">
               <NumberInput
-                value={targetWeightKg ?? suggestedTarget}
+                value={targetWeightKg ?? chosen.target}
                 onChange={setTargetWeightKg}
                 suffix="kg"
                 step={0.5}
@@ -326,53 +376,7 @@ export function OnboardingFlow() {
             </Section>
           </Reveal>
 
-          <Reveal index={3}>
-            <Section title="Structure">
-              {routine.days.map((day, index) => (
-                <View key={day.id}>
-                  {index > 0 ? <Divider /> : null}
-                  <MetricRow
-                    label={day.name}
-                    detail={day.exercises
-                      .slice(0, 3)
-                      .map((exercise) => exerciseName(exercise.exerciseId))
-                      .join(' · ')}
-                    value={`${estimateRoutineDayMinutes(day)}m`}
-                  />
-                </View>
-              ))}
-            </Section>
-          </Reveal>
-
-          <Reveal index={4}>
-            <Section title="Daily targets">
-              <MetricRow label="Calories" value={`${projection.targetKcal} kcal`} />
-              <Divider />
-              <MetricRow
-                label="Protein"
-                value={`${projection.proteinTargetG[0]}–${projection.proteinTargetG[1]} g`}
-              />
-            </Section>
-          </Reveal>
-
-          <Reveal index={5}>
-            <Section title="First two weeks">
-              <Text variant="bodySmall" tone="secondary">
-                {firstBlockObjective({
-                  daysPerWeek: routine.daysPerWeek,
-                  sessionMinutes: DEFAULTS.sessionMinutes,
-                  location: DEFAULTS.location,
-                  goalType: goalType as GoalType,
-                  layoffWeeks: DEFAULTS.layoffWeeks,
-                })}
-              </Text>
-            </Section>
-          </Reveal>
-
-          <Note>
-            Session length, training days, experience and everything else start on sensible defaults and are editable
-            in Profile.
-          </Note>
+          <Note>Everything adjusts later, and the plan recalculates from what you actually do.</Note>
 
           <ActionBar>
             <PrimaryButton label="Start" onPress={finish} />
@@ -403,10 +407,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   question: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
+  },
+  subtitle: {
+    marginBottom: spacing.lg,
   },
   options: {
     gap: spacing.md,
+    marginTop: spacing.lg,
   },
   card: {
     padding: spacing.lg,
@@ -415,14 +423,26 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
-  cardRow: {
+  cardSelected: {
+    borderColor: colors.accent,
+    backgroundColor: colors.accentSurface,
+  },
+  cardHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  cardSelected: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accentSurface,
+  cardLine: {
+    marginTop: spacing.xs,
+  },
+  cardFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+  },
+  fields: {
+    marginTop: spacing.lg,
   },
   field: {
     marginBottom: spacing.lg,
@@ -436,5 +456,21 @@ const styles = StyleSheet.create({
   block: {
     marginTop: spacing.xxl,
     marginBottom: spacing.xxl,
+  },
+  bullet: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    marginTop: 7,
+    backgroundColor: colors.accent,
+  },
+  bulletText: {
+    flex: 1,
   },
 });
