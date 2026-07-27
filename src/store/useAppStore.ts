@@ -193,6 +193,27 @@ function makeSet(order: number, template: Partial<WorkoutSet> = {}): WorkoutSet 
   };
 }
 
+/**
+ * Keeps history and anything the user already acted on, and drops the untouched
+ * future so the plan can be rebuilt from the current schedule. Rest days have to
+ * go too, otherwise a day that was rest yesterday can never become a training
+ * day today.
+ */
+function keepPastAndResolved(entries: PlannedSession[], from: ISODate): PlannedSession[] {
+  // A session the user deliberately moved forward is kept where they put it.
+  const rescheduleTargets = new Set(
+    entries.map((entry) => entry.rescheduledToDate).filter((date): date is ISODate => date !== null),
+  );
+  return entries.filter(
+    (entry) =>
+      entry.date < from ||
+      entry.status === 'completed' ||
+      entry.status === 'skipped' ||
+      entry.status === 'rescheduled' ||
+      rescheduleTargets.has(entry.date),
+  );
+}
+
 function reindex<T extends { order: number }>(items: T[]): T[] {
   return items.map((item, index) => ({ ...item, order: index }));
 }
@@ -308,11 +329,9 @@ export const useAppStore = create<Store>()(
 
       updateTraining: (patch) => {
         set((state) => ({ training: { ...state.training, ...patch } }));
-        // The plan follows the schedule: drop future days and rebuild them.
+        // The plan follows the schedule: drop the untouched future and rebuild it.
         set((state) => ({
-          plannedSessions: state.plannedSessions.filter(
-            (entry) => entry.date < todayOf() || entry.status !== 'planned',
-          ),
+          plannedSessions: keepPastAndResolved(state.plannedSessions, todayOf()),
         }));
         get().ensurePlan();
       },
@@ -457,9 +476,7 @@ export const useAppStore = create<Store>()(
         set((current) => ({
           routines: [...current.routines.map((entry) => ({ ...entry, deletedAt: nowISO() })), routine],
           activeRoutineId: routine.id,
-          plannedSessions: current.plannedSessions.filter(
-            (entry) => entry.date < todayOf() || entry.status !== 'planned',
-          ),
+          plannedSessions: keepPastAndResolved(current.plannedSessions, todayOf()),
         }));
         get().ensurePlan();
       },

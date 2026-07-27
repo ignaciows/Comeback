@@ -31,6 +31,25 @@ npm run typecheck     # tsc --noEmit
 npm test              # domain + end-to-end flow tests (Vitest)
 ```
 
+## Publishing
+
+The project is linked to EAS as `@parkyparking/comeback`
+([dashboard](https://expo.dev/accounts/parkyparking/projects/comeback)) and
+EAS Update is configured.
+
+```bash
+export EXPO_TOKEN=...                        # never commit this
+eas update --branch preview --environment preview --message "..."
+```
+
+EAS updates are consumed by development and production builds, **not by Expo
+Go** — Expo Go runs the app from a local dev server (`npx expo start`). To get
+Comeback onto an iPhone without a dev server you need a build:
+
+```bash
+eas build --platform ios --profile preview   # requires an Apple Developer account
+```
+
 ## The first run
 
 1. Complete the five-step onboarding (goal → starting point → availability →

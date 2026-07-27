@@ -173,6 +173,26 @@ describe('main flow', () => {
     expect(after.some((entry) => entry.date === target && entry.status === 'planned')).toBe(true);
   });
 
+  it('rebuilds the future plan when the schedule changes, keeping history', () => {
+    useAppStore.getState().completeOnboarding(onboarding);
+
+    const before = useAppStore.getState().plannedSessions;
+    const beforeTrainingDays = new Set(
+      before.filter((entry) => entry.status === 'planned').map((entry) => entry.date),
+    );
+    expect(beforeTrainingDays.size).toBeGreaterThan(0);
+
+    // Move to a completely different set of weekdays.
+    useAppStore.getState().updateTraining({ preferredWeekdays: [0, 4], preferredDaysPerWeek: 2 });
+
+    const after = useAppStore.getState().plannedSessions.filter((entry) => entry.status === 'planned');
+    expect(after.length).toBeGreaterThan(0);
+    for (const entry of after) {
+      const weekday = new Date(`${entry.date}T00:00:00`).getDay();
+      expect([0, 4]).toContain(weekday);
+    }
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();
