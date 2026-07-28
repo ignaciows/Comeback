@@ -6,7 +6,7 @@ import { PrimaryButton, SecondaryButton } from '@/components/Button';
 import { Note } from '@/components/Feedback';
 import { Header } from '@/components/Header';
 import { Input } from '@/components/Input';
-import { MetricRow } from '@/components/Metric';
+import { NavGroup, NavRow } from '@/components/NavRow';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
 import { SegmentedControl } from '@/components/SegmentedControl';
@@ -60,16 +60,12 @@ export default function GymScreen() {
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
       />
 
-      <MetricRow
-        label="Find a gym near you"
-        detail="Search real gyms and pre-fill what they have"
-        onPress={() => router.push('/gyms')}
-        chevron
-      />
+      <NavGroup>
+        <NavRow label="Find another gym" icon="search" onPress={() => router.push('/gyms')} />
+      </NavGroup>
 
       <Note style={styles.intro}>
-        You do not need to fill this in. Answer as you go — whenever you substitute an exercise, the app remembers
-        what was available.
+        No need to fill this in. Swap an exercise and the app remembers what was there.
       </Note>
 
       <View style={styles.list}>

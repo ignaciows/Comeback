@@ -60,6 +60,7 @@ export default function ProgressScreen() {
         <NavGroup style={styles.group}>
           <NavRow
             label="Momentum"
+            icon="bolt"
             value={engine.momentum ? `${Math.round(engine.momentum.score)}` : '—'}
             detail={engine.momentum ? momentumStateLabel(engine.momentum.state) : 'Not enough data yet'}
             tone={engine.momentum && engine.momentum.score >= 60 ? 'accent' : 'neutral'}
@@ -67,6 +68,7 @@ export default function ProgressScreen() {
           />
           <NavRow
             label="Body weight"
+            icon="body"
             value={latestWeight ? `${latestWeight.weightKg.toFixed(1)} kg` : 'Not logged'}
             tone={latestWeight ? 'neutral' : 'warning'}
             dot={!latestWeight}
@@ -74,14 +76,14 @@ export default function ProgressScreen() {
           />
           <NavRow
             label="Consistency"
+            icon="calendar"
             value={`${engine.week.completed} of ${engine.week.target}`}
-            detail="This week"
             onPress={() => router.push('/consistency')}
           />
           <NavRow
             label="Performance"
+            icon="progress"
             value={`${sessions.length}`}
-            detail="Volume and lifts"
             onPress={() => router.push('/performance')}
           />
         </NavGroup>

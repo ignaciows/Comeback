@@ -179,8 +179,7 @@ export default function KnowsScreen() {
       ) : null}
 
       <Note>
-        Nothing here leaves your phone. A correction the app makes to its own guess is applied on its own; anything
-        that changes what you committed to waits for you.
+        Nothing leaves your phone. The app corrects its own guesses; anything you committed to waits for you.
       </Note>
     </Screen>
   );

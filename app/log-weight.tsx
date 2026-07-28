@@ -66,8 +66,7 @@ export default function LogWeightScreen() {
       </Section>
 
       <Note>
-        Logged manually today. When Renpho or Apple Health is connected, imported values appear here with their source
-        and stay editable.
+        Connect Apple Health and Renpho weights land here on their own, still editable.
       </Note>
 
       {measurements.length > 0 ? (

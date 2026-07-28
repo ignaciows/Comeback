@@ -143,8 +143,7 @@ export default function SourcesScreen() {
       </Reveal>
 
       <Note>
-        Nothing is uploaded anywhere. Imported values keep their source, a value you typed is never overwritten by an
-        imported one, and importing twice changes nothing.
+        Nothing is uploaded. A value you typed is never overwritten, and importing twice changes nothing.
       </Note>
     </Screen>
   );

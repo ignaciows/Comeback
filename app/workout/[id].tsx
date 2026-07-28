@@ -148,8 +148,7 @@ export default function WorkoutDetailScreen() {
       </Section>
 
       <Note>
-        Corrections are allowed after the fact. Momentum, volume and Comeback Progress are recalculated from the
-        corrected data — nothing is frozen.
+        Correct anything afterwards. Every number is recalculated from it — nothing is frozen.
       </Note>
 
       <ActionBar>

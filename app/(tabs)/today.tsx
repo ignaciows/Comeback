@@ -37,6 +37,7 @@ export default function TodayScreen() {
   const plannedSessions = useAppStore((state) => state.plannedSessions);
 
   const applied = useAppStore((state) => state.appliedProposals);
+  const hasGym = useAppStore((state) => state.gyms.length > 0);
 
   const date = todayOf();
   const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
@@ -135,11 +136,13 @@ export default function TodayScreen() {
         <NavGroup style={styles.group}>
           <NavRow
             label="Why this session"
+            icon="info"
             onPress={() => router.push('/why')}
             value={recommendation.confidence === 'low' ? 'low confidence' : undefined}
           />
           <NavRow
             label="Check-in"
+            icon="sleep"
             value={checkin && readiness.score !== null ? readinessLabel(readiness.score) : 'Not logged'}
             tone={checkin ? 'neutral' : 'warning'}
             dot={!checkin}
@@ -147,6 +150,7 @@ export default function TodayScreen() {
           />
           <NavRow
             label="Momentum"
+            icon="bolt"
             value={momentum ? `${Math.round(momentum.score)}` : '—'}
             detail={momentum ? momentumStateLabel(momentum.state) : 'Log a session to start it'}
             tone={momentum && momentum.score >= 60 ? 'accent' : 'neutral'}
@@ -194,8 +198,21 @@ export default function TodayScreen() {
               onPress={() => router.push('/knows')}
             />
           ) : null}
+          {/* Only until it is answered: without a gym the app is guessing at
+              which exercises are even possible. */}
+          {!hasGym ? (
+            <NavRow
+              label="Find your gym"
+              icon="gym"
+              detail="So the plan knows what you can use"
+              tone="accent"
+              dot
+              onPress={() => router.push('/gyms')}
+            />
+          ) : null}
           <NavRow
             label="Plan"
+            icon="target"
             value={
               projection?.daysRemaining !== null && projection?.daysRemaining !== undefined
                 ? `${projection.daysRemaining} days`
@@ -203,7 +220,6 @@ export default function TodayScreen() {
                   ? strategyProfile(goal.strategy).label
                   : '—'
             }
-            detail={goal ? strategyProfile(goal.strategy).label : undefined}
             onPress={() => router.push('/plan')}
           />
         </NavGroup>

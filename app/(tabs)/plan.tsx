@@ -199,34 +199,38 @@ export default function PlanTab() {
               onPress={() => router.push('/why')}
             />
           ) : null}
-          <NavRow label="Change the plan" detail="Outcome, speed, calories" onPress={() => router.push('/adjust')} />
-          <NavRow label="Build your own" detail="Drag the blocks, watch it recalculate" onPress={() => router.push('/builder')} />
+          <NavRow label="Change the plan" icon="target" onPress={() => router.push('/adjust')} />
+          <NavRow label="Build your own" icon="edit" detail="Drag the blocks" onPress={() => router.push('/builder')} />
           <NavRow
             label="Named plans"
+            icon="progress"
             detail={routeProgress?.routeName ?? 'Bulk then cut, lean, recomp'}
             onPress={() => router.push('/routes')}
           />
           <NavRow
             label="Muscle focus"
+            icon="body"
             value={focus.length > 0 ? `${focus.length}` : undefined}
             detail={focus.length === 0 ? 'Balanced' : focus.map((muscle) => MUSCLE_GROUP_LABELS[muscle]).join(', ')}
             onPress={() => router.push('/focus')}
           />
           <NavRow
             label="Routine"
+            icon="train"
             value={routine ? `${routine.daysPerWeek} days` : '—'}
             detail={routine?.name}
             onPress={() => router.push('/routine')}
           />
           <NavRow
             label="What the app worked out"
+            icon="bolt"
             value={engine.proposals.length > 0 ? `${engine.proposals.length}` : undefined}
             tone={engine.proposals.length > 0 ? 'accent' : 'neutral'}
             dot={engine.proposals.length > 0}
             onPress={() => router.push('/knows')}
           />
-          <NavRow label="Journal" detail="Every day, as a square" onPress={() => router.push('/journal')} />
-          <NavRow label="Progress" detail="Momentum, body, lifts" onPress={() => router.push('/progress')} />
+          <NavRow label="Journal" icon="journal" onPress={() => router.push('/journal')} />
+          <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
         </NavGroup>
       </Reveal>
     </Screen>

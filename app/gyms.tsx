@@ -185,8 +185,7 @@ export default function GymsScreen() {
       ) : null}
 
       <Note style={styles.footer}>
-        Locations from OpenStreetMap; yoga, pilates and class-only studios are left out. Equipment is what the chain
-        normally has — confirm it on your first visit and the app will use what you saw instead.
+        Equipment is what the chain normally has. Confirm it on your first visit and the app uses what you saw.
       </Note>
     </Screen>
   );

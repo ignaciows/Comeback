@@ -102,8 +102,7 @@ export default function FocusScreen() {
       </Reveal>
 
       <Note>
-        Volume moves rather than piles up: sets come off what you did not pick, never below the amount that holds a
-        muscle where it is. Up to {MAX_FOCUS} at a time — past that nothing is a priority.
+        Sets come off what you did not pick, never below what holds a muscle where it is. Up to {MAX_FOCUS} at a time.
       </Note>
     </Screen>
   );

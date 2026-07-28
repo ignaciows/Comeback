@@ -22,7 +22,21 @@ export type IconName =
   | 'arrowUp'
   | 'arrowDown'
   | 'arrowFlat'
-  | 'info';
+  | 'info'
+  | 'gym'
+  | 'search'
+  | 'calendar'
+  | 'pause'
+  | 'play'
+  | 'restart'
+  | 'target'
+  | 'body'
+  | 'journal'
+  | 'sleep'
+  | 'nutrition'
+  | 'bolt'
+  | 'sources'
+  | 'method';
 
 type Props = {
   name: IconName;
@@ -98,6 +112,81 @@ export function Icon({ name, size = iconSize.md, color = colors.text, strokeWidt
       {name === 'arrowUp' && <Path d="M12 19V5M6 11l6-6 6 6" {...stroke} />}
       {name === 'arrowDown' && <Path d="M12 5v14M6 13l6 6 6-6" {...stroke} />}
       {name === 'arrowFlat' && <Path d="M5 12h14M15 8l4 4-4 4" {...stroke} />}
+      {name === 'gym' && (
+        <>
+          {/* A loaded bar: the one shape every gym has. */}
+          <Path d="M3 12h18" {...stroke} />
+          <Rect x={4} y={8.5} width={2.6} height={7} rx={1} {...stroke} />
+          <Rect x={7.4} y={10} width={2} height={4} rx={0.8} {...stroke} />
+          <Rect x={14.6} y={10} width={2} height={4} rx={0.8} {...stroke} />
+          <Rect x={17.4} y={8.5} width={2.6} height={7} rx={1} {...stroke} />
+        </>
+      )}
+      {name === 'search' && (
+        <>
+          <Circle cx={11} cy={11} r={6} {...stroke} />
+          <Path d="M15.5 15.5L20 20" {...stroke} />
+        </>
+      )}
+      {name === 'calendar' && (
+        <>
+          <Rect x={4} y={6} width={16} height={14} rx={2.5} {...stroke} />
+          <Path d="M4 10.5h16M8.5 4v4M15.5 4v4" {...stroke} />
+        </>
+      )}
+      {name === 'pause' && <Path d="M9.5 6v12M14.5 6v12" {...stroke} />}
+      {name === 'play' && <Path d="M8 5.5l11 6.5-11 6.5z" {...stroke} />}
+      {name === 'restart' && (
+        <>
+          <Path d="M19 12a7 7 0 11-2.4-5.3" {...stroke} />
+          <Path d="M19 4v4h-4" {...stroke} />
+        </>
+      )}
+      {name === 'target' && (
+        <>
+          <Circle cx={12} cy={12} r={8} {...stroke} />
+          <Circle cx={12} cy={12} r={3.6} {...stroke} />
+          <Circle cx={12} cy={12} r={1} fill={color} stroke="none" />
+        </>
+      )}
+      {name === 'body' && (
+        <>
+          <Circle cx={12} cy={5.5} r={2.6} {...stroke} />
+          <Path d="M12 8.5v6.5" {...stroke} />
+          <Path d="M6.5 11l5.5 1.6 5.5-1.6" {...stroke} />
+          <Path d="M12 15l-3 5.5M12 15l3 5.5" {...stroke} />
+        </>
+      )}
+      {name === 'journal' && (
+        <>
+          <Rect x={5} y={4} width={14} height={16} rx={2} {...stroke} />
+          <Path d="M9 4v16" {...stroke} />
+          <Path d="M12.5 9h3.5M12.5 13h3.5" {...stroke} />
+        </>
+      )}
+      {name === 'sleep' && <Path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" {...stroke} />}
+      {name === 'nutrition' && (
+        <>
+          <Path d="M12 8c3-4 8-2 8 3s-5 9-8 9-8-4-8-9 5-7 8-3z" {...stroke} />
+          <Path d="M12 8V4.5" {...stroke} />
+        </>
+      )}
+      {name === 'bolt' && <Path d="M13.5 3L6 13.5h5L10.5 21 18 10.5h-5z" {...stroke} />}
+      {name === 'sources' && (
+        <>
+          <Circle cx={6.5} cy={12} r={2.5} {...stroke} />
+          <Circle cx={17.5} cy={6.5} r={2.5} {...stroke} />
+          <Circle cx={17.5} cy={17.5} r={2.5} {...stroke} />
+          <Path d="M8.8 10.8l6.4-3.2M8.8 13.2l6.4 3.2" {...stroke} />
+        </>
+      )}
+      {name === 'method' && (
+        <>
+          <Path d="M9 3v6.5L4.5 18a2 2 0 001.8 3h11.4a2 2 0 001.8-3L15 9.5V3" {...stroke} />
+          <Path d="M7.5 3h9" {...stroke} />
+          <Path d="M7 14h10" {...stroke} />
+        </>
+      )}
       {name === 'info' && (
         <>
           <Circle cx={12} cy={12} r={8} {...stroke} />

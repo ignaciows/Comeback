@@ -41,7 +41,8 @@ export default function TrainScreen() {
   const date = todayOf();
   const next = engine.nextPlanned;
   const nextDay = routine?.days.find((day) => day.id === next?.routineDayId) ?? null;
-  const equipment = (gyms.find((entry) => entry.id === gymId) ?? gyms[0])?.equipment ?? {};
+  const gym = gyms.find((entry) => entry.id === gymId) ?? gyms[0] ?? null;
+  const equipment = gym?.equipment ?? {};
 
   const start = (routineDayId: string | null, name: string, plannedSessionId: string | null) => {
     const id = startSession({
@@ -128,20 +129,36 @@ export default function TrainScreen() {
 
       <Reveal index={2}>
         <NavGroup style={styles.group}>
+          {/* Which gym you are in decides which exercises are even possible,
+              so it belongs here rather than buried in settings. */}
+          <NavRow
+            label="Your gym"
+            icon="gym"
+            value={gym ? gym.name.split(' · ')[0] : 'Find one'}
+            detail={gym ? undefined : 'So the plan knows what you can use'}
+            tone={gym ? 'neutral' : 'accent'}
+            dot={!gym}
+            onPress={() => router.push(gym ? '/gym' : '/gyms')}
+          />
           <NavRow
             label="Routine"
+            icon="train"
             value={routine ? `${routine.daysPerWeek} days` : '—'}
-            detail={routine?.name}
             onPress={() => router.push('/routine')}
           />
-          <NavRow label="This week" value={`${engine.week.completed} of ${engine.week.target}`} onPress={() => router.push('/consistency')} />
+          <NavRow
+            label="This week"
+            icon="calendar"
+            value={`${engine.week.completed} of ${engine.week.target}`}
+            onPress={() => router.push('/consistency')}
+          />
           <NavRow
             label="History"
+            icon="journal"
             value={`${history.length}`}
-            detail={history.length === 0 ? 'Nothing logged yet' : undefined}
             onPress={() => router.push('/history')}
           />
-          <NavRow label="Exercises" onPress={() => router.push('/exercises')} />
+          <NavRow label="Exercises" icon="search" onPress={() => router.push('/exercises')} />
         </NavGroup>
       </Reveal>
 

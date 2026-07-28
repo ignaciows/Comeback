@@ -127,9 +127,8 @@ export default function MomentumScreen() {
           );
         })}
         <Note style={styles.note}>
-          Components without data are dropped and their weight is shared across the rest, so a missing signal never
-          reads as a zero.
-        </Note>
+        A component with no data is dropped and its weight shared, never counted as a zero.
+      </Note>
       </Section>
 
       <Section title="Today's factors">

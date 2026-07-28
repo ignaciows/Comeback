@@ -1,11 +1,13 @@
 import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
-import { Icon } from '@/design-system/Icon';
+import { Icon, type IconName } from '@/design-system/Icon';
 import { Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 
 type Props = {
   label: string;
+  /** A glyph on the left. A list of six rows is unscannable without them. */
+  icon?: IconName;
   /** The one number or word that answers the row. */
   value?: string;
   /** Small line under the label. Use rarely — the row should read at a glance. */
@@ -21,7 +23,7 @@ type Props = {
  * a chevron. Screens are lists of these, and detail lives one tap deeper —
  * nothing is explained on a screen that only needed to point somewhere.
  */
-export function NavRow({ label, value, detail, onPress, tone = 'neutral', dot = false }: Props) {
+export function NavRow({ label, icon, value, detail, onPress, tone = 'neutral', dot = false }: Props) {
   const valueColor =
     tone === 'accent' ? colors.accent : tone === 'warning' ? colors.warning : colors.textSecondary;
 
@@ -33,6 +35,13 @@ export function NavRow({ label, value, detail, onPress, tone = 'neutral', dot = 
       style={({ pressed }) => [styles.row, pressed && { opacity: opacity.pressed }]}
     >
       {dot ? <View style={[styles.dot, { backgroundColor: valueColor }]} /> : null}
+      {icon ? (
+        <Icon
+          name={icon}
+          size={18}
+          color={tone === 'neutral' ? colors.textTertiary : valueColor}
+        />
+      ) : null}
       <View style={styles.labels}>
         <Text variant="body">{label}</Text>
         {detail ? (

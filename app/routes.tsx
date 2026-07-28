@@ -163,8 +163,7 @@ export default function RoutesScreen() {
       />
 
       <Note style={styles.note}>
-        Curves are model estimates from population averages, simulated week by week with muscle gain capped by what
-        training can actually build. They move as your own data comes in.
+        Estimates, simulated week by week with muscle gain capped at what training can build. They move as your data comes in.
       </Note>
     </Screen>
   );

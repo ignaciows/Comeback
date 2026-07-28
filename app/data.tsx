@@ -39,9 +39,8 @@ export default function DataScreen() {
 
       <Section title="Sample history">
         <Note style={styles.note}>
-          Writes a starting profile plus four weeks of generated sessions so you can see how the models behave. It
-          replaces the sessions you have now.
-        </Note>
+        Four weeks of generated sessions, so the models have something to show. Replaces what you have now.
+      </Note>
         <SecondaryButton label="Load sample history" onPress={() => setConfirmSeed(true)} />
       </Section>
 
