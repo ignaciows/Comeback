@@ -12,16 +12,24 @@ import { Section } from '@/components/Section';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
+import { useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 import { weekdayLabel } from '@/utils/date';
 
-/** When and where you train. Changing it rebuilds the future plan. */
+/**
+ * Which days, and how long — not how many.
+ *
+ * How many sessions a week is the plan's requirement, not a preference, so it
+ * is stated here rather than asked for. Choosing which days those sessions
+ * land on is genuinely the user's, because only they know their week.
+ */
 export default function ScheduleScreen() {
   const router = useRouter();
   const training = useAppStore((state) => state.training);
   const preferences = useAppStore((state) => state.preferences);
   const updateTraining = useAppStore((state) => state.updateTraining);
   const updatePreferences = useAppStore((state) => state.updatePreferences);
+  const engine = useEngine();
   const regenerateRoutine = useAppStore((state) => state.regenerateRoutine);
 
   const [confirmRebuild, setConfirmRebuild] = useState(false);
@@ -38,19 +46,25 @@ export default function ScheduleScreen() {
     <Screen>
       <Header
         title="Schedule"
-        subtitle={`${training.preferredDaysPerWeek} days a week`}
+        subtitle={`${engine.weeklyTarget} sessions a week`}
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
       />
 
-      <Section title="Days per week">
-        <SegmentedControl
-          options={[3, 4, 5, 6].map((value) => ({ value, label: `${value}` }))}
-          value={training.preferredDaysPerWeek}
-          onChange={(value) => updateTraining({ preferredDaysPerWeek: value })}
+      <Section title="Sessions a week">
+        <MetricRow
+          label={engine.ramp.weeksToTarget > 0 ? 'This week' : 'Your plan needs'}
+          value={`${engine.weeklyTarget}`}
+          detail={
+            engine.ramp.weeksToTarget > 0
+              ? `Building to ${engine.ramp.targetDays} over ${engine.ramp.weeksToTarget} weeks`
+              : 'Set by the plan you chose, not by this screen'
+          }
+          onPress={() => router.push('/adjust')}
+          chevron
         />
       </Section>
 
-      <Section title="Which days">
+      <Section title="Which days" footnote={`Pick at least ${engine.weeklyTarget}.`}>
         <View style={styles.weekdays}>
           {[1, 2, 3, 4, 5, 6, 0].map((weekday) => {
             const selected = training.preferredWeekdays.includes(weekday);

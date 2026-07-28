@@ -6,7 +6,9 @@ import { getExercise } from '@/data/exercises';
 import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
 import { defaultStrategyFor } from '@/domain/plan/strategies';
-import { simulatePlan } from '@/domain/plan/simulate';
+import { SPEEDS, simulatePlan } from '@/domain/plan/simulate';
+import { requiredSessionsPerWeek } from '@/domain/plan/commitments';
+import type { VerdictAction } from '@/domain/plan/verdict';
 import { getRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
@@ -212,6 +214,8 @@ type Actions = {
   }) => void;
   /** Biases the routine towards the muscles the user picked. */
   setMuscleFocus: (muscles: MuscleGroup[]) => void;
+  /** Reconfigures the plan to match what the user is actually doing. */
+  applyVerdictAction: (action: VerdictAction) => void;
   /** Applies a change the app worked out on its own. */
   applyProposal: (proposal: Proposal) => void;
   dismissProposal: (id: string) => void;
@@ -1248,6 +1252,52 @@ export const useAppStore = create<Store>()(
           routines: current.routines.map((entry) => (entry.id === routine.id ? next : entry)),
         }));
         track({ name: 'muscle_focus_set', count: muscles.length });
+      },
+
+      /**
+       * The plan changes to fit the person, not the other way round.
+       *
+       * A frequency the user is not hitting is not lowered on its own — the
+       * pace that requires it is. Otherwise the app would show a five-day
+       * plan's dates next to a three-day schedule, which is the exact lie
+       * this is meant to stop.
+       */
+      applyVerdictAction: (action) => {
+        const state = get();
+        if (!state.goal) return;
+
+        const objective = state.goal.objective;
+
+        if (action.kind === 'lower_frequency' || action.kind === 'raise_frequency') {
+          const target = action.kind === 'lower_frequency' ? action.toSessions : action.toSessions;
+          // The fastest pace whose demand this frequency actually covers.
+          const affordable = [...SPEEDS]
+            .reverse()
+            .find((speed) => requiredSessionsPerWeek(objective, speed) <= target);
+          const speed = affordable ?? SPEEDS[0];
+
+          get().applyPlanIntent({
+            objective,
+            speed,
+            fatTolerance: state.goal.fatTolerance,
+            targetWeightKg: state.goal.targetWeightKg,
+            horizonWeeks: state.goal.horizonWeeks,
+          });
+          track({ name: 'plan_reconfigured', reason: action.kind });
+          return;
+        }
+
+        if (action.kind === 'accelerate') {
+          get().applyPlanIntent({
+            objective,
+            speed: action.toSpeed,
+            fatTolerance: state.goal.fatTolerance,
+            targetWeightKg: state.goal.targetWeightKg,
+            horizonWeeks: state.goal.horizonWeeks,
+          });
+          track({ name: 'plan_reconfigured', reason: 'accelerate' });
+        }
+        // `log_more` asks the user for something; there is no state to change.
       },
 
       applyProposal: (proposal) => {

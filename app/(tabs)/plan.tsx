@@ -1,4 +1,6 @@
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { StatusPill } from '@/components/Feedback';
@@ -12,29 +14,54 @@ import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { strategyProfile } from '@/domain/plan/strategies';
-import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
+import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
+import { PlanVerdictCard, verdictActionLabel } from '@/features/plan/PlanVerdictCard';
+import { RequirementList } from '@/features/plan/RequirementList';
 import { VolumeBars } from '@/features/plan/VolumeBars';
-import { useActiveRoutine, useEngine } from '@/store/hooks';
+import { useActiveRoutine, useCompletedSessions, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
-import { formatLongDate } from '@/utils/date';
+import { snapshotOf, useRecalcStore } from '@/store/useRecalcStore';
+import { formatLongDate, startOfWeek, today as todayOf } from '@/utils/date';
 
 /**
- * The plan, as it stands right now.
+ * The plan: what it needs from you, and whether you are giving it.
  *
- * One number above the fold — how long is left — then the two pictures that
- * say whether it is on track: how many sessions remain, and where the work is
- * going. Everything that changes the plan is a row underneath, so this screen
- * shows and the next one decides.
+ * The order is the argument. First whether the plan you picked is the plan you
+ * are actually on, then the road ahead as circles to fill, then what the plan
+ * costs. Nothing here asks how many days you can train — that is the plan's
+ * requirement, and this screen exists to show it and check it.
  */
 export default function PlanTab() {
   const router = useRouter();
   const engine = useEngine();
+  const sessions = useCompletedSessions();
   const goal = useAppStore((state) => state.goal);
   const routine = useActiveRoutine();
+  const applyVerdictAction = useAppStore((state) => state.applyVerdictAction);
+  const arm = useRecalcStore((state) => state.arm);
 
-  const { projection, volume, routeProgress, drift } = engine;
+  const { projection, volume, routeProgress, drift, verdict, commitments, ramp, weeklyTarget } = engine;
   const strategy = goal ? strategyProfile(goal.strategy) : null;
   const focus = goal?.muscleFocus ?? [];
+  const weekStart = startOfWeek(todayOf());
+
+  const weeks = useMemo(() => {
+    const byWeek = new Map<string, number>();
+    for (const session of sessions) {
+      const start = startOfWeek(session.date);
+      byWeek.set(start, (byWeek.get(start) ?? 0) + 1);
+    }
+    return pathWeeksFrom(ramp, byWeek, weekStart);
+  }, [sessions, ramp, weekStart]);
+
+  const actionLabel = verdictActionLabel(verdict);
+
+  const act = () => {
+    if (!verdict.action) return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    arm(snapshotOf(engine), verdict.headline);
+    applyVerdictAction(verdict.action);
+  };
 
   return (
     <Screen ambient>
@@ -42,11 +69,9 @@ export default function PlanTab() {
         <View style={styles.hero}>
           <View style={styles.heroHead}>
             <StatusPill label={strategy?.label ?? 'No plan'} tone="accent" />
-            {projection ? (
-              <Text variant="caption" tone="tertiary">
-                {projection.confidence === 'high' ? 'On measured data' : `${projection.confidence} confidence`}
-              </Text>
-            ) : null}
+            <Text variant="caption" tone="tertiary">
+              {`${weeklyTarget}× a week`}
+            </Text>
           </View>
 
           <View style={styles.heroValue}>
@@ -64,27 +89,42 @@ export default function PlanTab() {
         </View>
       </Reveal>
 
-      {/* Anything the user just changed lands here, counting to its new value. */}
+      {/* Anything just changed lands here, counting to its new value. */}
       <Reveal index={1}>
         <View style={styles.recalc}>
           <Recalculation engine={engine} />
         </View>
       </Reveal>
 
-      {projection ? (
-        <Reveal index={2}>
-          <View style={styles.block}>
-            <MilestoneTrack
-              completed={projection.sessionsCompleted}
-              remaining={projection.sessionsRemaining}
-              targetLabel={projection.targetWeightKg ? `${projection.targetWeightKg.toFixed(1)} kg` : 'your target'}
-              footnote={projection.targetDate ? `Target ${formatLongDate(projection.targetDate)}` : undefined}
-            />
-          </View>
-        </Reveal>
-      ) : null}
+      <Reveal index={2}>
+        <PlanVerdictCard
+          verdict={verdict}
+          actionLabel={actionLabel ?? undefined}
+          onAct={actionLabel ? act : undefined}
+          style={styles.verdict}
+        />
+      </Reveal>
 
       <Reveal index={3}>
+        <Section
+          title="The road"
+          footnote={
+            ramp.weeksToTarget > 0
+              ? `Building to ${ramp.targetDays} a week over ${ramp.weeksToTarget} weeks, from the ${ramp.startDays} you do now.`
+              : undefined
+          }
+        >
+          <PathTrack weeks={weeks} />
+        </Section>
+      </Reveal>
+
+      <Reveal index={4}>
+        <Section title="What this plan needs">
+          <RequirementList commitments={commitments} />
+        </Section>
+      </Reveal>
+
+      <Reveal index={5}>
         <Section
           title="Where the work goes"
           action={{ label: focus.length > 0 ? 'Change' : 'Choose', onPress: () => router.push('/focus') }}
@@ -98,7 +138,7 @@ export default function PlanTab() {
         </Section>
       </Reveal>
 
-      <Reveal index={4}>
+      <Reveal index={6}>
         <NavGroup style={styles.group}>
           {routeProgress?.nextBlock ? (
             <NavRow
@@ -110,7 +150,13 @@ export default function PlanTab() {
             />
           ) : null}
           {drift ? (
-            <NavRow label={drift.headline} detail={drift.detail} tone={drift.days > 0 ? 'warning' : 'accent'} dot onPress={() => router.push('/why')} />
+            <NavRow
+              label={drift.headline}
+              detail={drift.detail}
+              tone={drift.days > 0 ? 'warning' : 'accent'}
+              dot
+              onPress={() => router.push('/why')}
+            />
           ) : null}
           <NavRow label="Change the plan" detail="Outcome, speed, calories" onPress={() => router.push('/adjust')} />
           <NavRow
@@ -170,8 +216,8 @@ const styles = StyleSheet.create({
   recalc: {
     marginTop: spacing.lg,
   },
-  block: {
-    marginTop: spacing.xl,
+  verdict: {
+    marginTop: spacing.lg,
   },
   focusLine: {
     marginTop: spacing.md,

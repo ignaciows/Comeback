@@ -39,7 +39,7 @@ export default function TodayScreen() {
   const applied = useAppStore((state) => state.appliedProposals);
 
   const date = todayOf();
-  const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress } = engine;
+  const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
   // At most one suggestion here; the rest wait on their own screen.
   const openProposal = engine.proposals.find((entry) => !applied.includes(entry.id)) ?? null;
   const todayPlanned = plannedSessions.find((entry) => entry.date === date && entry.status === 'planned') ?? null;
@@ -169,6 +169,17 @@ export default function TodayScreen() {
               label={drift.headline}
               detail={drift.detail}
               tone={drift.days > 0 ? 'warning' : 'accent'}
+              dot
+              onPress={() => router.push('/plan')}
+            />
+          ) : null}
+          {/* The plan not matching what is actually happening outranks
+              anything else the app noticed. */}
+          {verdict.action ? (
+            <NavRow
+              label={verdict.headline}
+              detail={verdict.detail}
+              tone={verdict.state === 'too_demanding' ? 'warning' : 'accent'}
               dot
               onPress={() => router.push('/plan')}
             />

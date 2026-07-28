@@ -21,7 +21,10 @@ import { adaptToday, type DailyAdaptation } from './training/adaptation';
 import { volumeBreakdown, type MuscleVolume } from './training/volume';
 import { bestE1rmByExercise, sessionSetCount, sessionVolume } from './training/metrics';
 import { sessionMechanics, wasReduced } from './training/sessionMetrics';
+import { evaluateCommitments, requiredSessionsPerWeek, type Commitment } from './plan/commitments';
 import { observedWeeklyRate } from './plan/observedRate';
+import { buildRamp, currentRampTarget, observedSessionsPerWeek, type Ramp } from './plan/ramp';
+import { judgePlan, type PlanVerdict } from './plan/verdict';
 import { currentBlock, getRoute } from './plan/routes';
 import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
@@ -117,6 +120,14 @@ export type EngineResult = {
   reminder: ReturnType<typeof deriveReminder>;
   /** Weekly sets per muscle against the productive range. */
   volume: MuscleVolume[];
+  /** What the chosen plan requires, and whether it is being done. */
+  commitments: Commitment[];
+  /** The climb from the user's current frequency to the plan's requirement. */
+  ramp: Ramp;
+  /** Sessions this week asks for — the ramp step, not always the full target. */
+  weeklyTarget: number;
+  /** Whether the plan being followed is the plan that was chosen. */
+  verdict: PlanVerdict;
 };
 
 function completedSessions(sessions: WorkoutSession[]): WorkoutSession[] {
@@ -222,7 +233,7 @@ export function buildMomentumSeries(input: EngineInput): MomentumSnapshot[] {
   return series;
 }
 
-function weekSummary(input: EngineInput, sessions: WorkoutSession[]): WeekSummary {
+function weekSummary(input: EngineInput, sessions: WorkoutSession[], target: number): WeekSummary {
   const start = startOfWeek(input.today, input.weekStartsOn);
   const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
 
@@ -233,7 +244,7 @@ function weekSummary(input: EngineInput, sessions: WorkoutSession[]): WeekSummar
     start,
     completed: days.filter((date) => completedDates.has(date)).length,
     planned: days.filter((date) => plannedByDate.get(date)?.status === 'planned').length,
-    target: input.training.preferredDaysPerWeek,
+    target,
     days: days.map((date) => {
       if (completedDates.has(date)) return { date, state: 'completed' as const };
       const planned = plannedByDate.get(date);
@@ -303,7 +314,22 @@ export function runEngine(input: EngineInput): EngineResult {
   const lastSession = sessions[sessions.length - 1] ?? null;
   const daysSinceLastSession = lastSession ? daysBetween(lastSession.date, input.today) : null;
 
-  const week = weekSummary(input, sessions);
+  // What the chosen plan demands, and the climb towards it. The ramp starts
+  // from what the user measurably does; only with no history at all does it
+  // fall back to what they said they would do.
+  const requiredSessions = input.goal
+    ? requiredSessionsPerWeek(input.goal.objective, input.goal.speed)
+    : input.training.preferredDaysPerWeek;
+
+  const ramp = buildRamp({
+    today: input.today,
+    targetDays: requiredSessions,
+    startDays: observedSessionsPerWeek(input.sessions, input.today) ?? input.training.preferredDaysPerWeek,
+    weekStartsOn: input.weekStartsOn,
+  });
+  const weeklyTarget = currentRampTarget(ramp, input.today, input.weekStartsOn);
+
+  const week = weekSummary(input, sessions, weeklyTarget);
 
   const todayPlanned = input.plannedSessions.find((entry) => entry.date === input.today) ?? null;
   const todayInfo = routineDayInfo(input, todayPlanned?.routineDayId ?? null);
@@ -344,7 +370,7 @@ export function runEngine(input: EngineInput): EngineResult {
     daysSinceLastSession,
     consecutiveTrainingDays: consecutiveTrainingDays(sessions, input.today),
     sessionsThisWeek: week.completed,
-    targetSessionsPerWeek: input.training.preferredDaysPerWeek,
+    targetSessionsPerWeek: weeklyTarget,
     momentumScore: momentum?.score ?? null,
     dataConfidence: momentum?.confidence ?? 'low',
   });
@@ -448,7 +474,7 @@ export function runEngine(input: EngineInput): EngineResult {
     readiness: readiness.score,
     readinessVsBaseline: readiness.vsBaseline,
     sessionsThisWeek: week.completed,
-    targetSessionsPerWeek: input.training.preferredDaysPerWeek,
+    targetSessionsPerWeek: weeklyTarget,
     missedThisWeek: missedThisWeek.length,
     daysSinceLastSession,
   });
@@ -469,6 +495,26 @@ export function runEngine(input: EngineInput): EngineResult {
     observations,
     training: input.training,
     preferences: { units: 'metric', defaultRestSeconds: input.defaultRestSeconds, weekStartsOn: input.weekStartsOn },
+  });
+
+  const commitments = evaluateCommitments({
+    today: input.today,
+    sessions: input.sessions,
+    checkins: input.checkins,
+    requiredSessions,
+    requiredKcal: projection?.targetKcal ?? 0,
+    requiredProteinG: projection?.proteinTargetG[0] ?? 0,
+  });
+
+  const verdict = judgePlan({
+    today: input.today,
+    sessions: input.sessions,
+    commitments,
+    currentTarget: weeklyTarget,
+    requiredSessions,
+    speed: input.goal?.speed ?? 'steady',
+    momentum: momentum?.score ?? null,
+    readinessVsBaseline: readiness.vsBaseline,
   });
 
   return {
@@ -495,6 +541,10 @@ export function runEngine(input: EngineInput): EngineResult {
     proposals,
     reminder: deriveReminder(observations),
     volume: volumeBreakdown(activeRoutine, input.goal?.muscleFocus ?? []),
+    commitments,
+    ramp,
+    weeklyTarget,
+    verdict,
   };
 }
 

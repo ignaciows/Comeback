@@ -422,6 +422,43 @@ describe('main flow', () => {
     expect(state.appliedProposals).toContain('rest_seconds');
   });
 
+  it('moves the plan down to a pace the user can actually meet', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().applyPlanIntent({
+      objective: 'build',
+      speed: 'max',
+      fatTolerance: 'some',
+      targetWeightKg: 84,
+    });
+
+    const demanding = selectEngine(useAppStore.getState());
+    expect(demanding.ramp.targetDays).toBe(6);
+
+    // The app offers the plan that a two-day-a-week reality can carry.
+    useAppStore.getState().applyVerdictAction({ kind: 'lower_frequency', toSessions: 3 });
+    const state = useAppStore.getState();
+
+    // The pace changed, not just the number of days — otherwise the app would
+    // show the fast plan's dates next to a slow plan's schedule.
+    expect(state.goal?.speed).not.toBe('max');
+    const after = selectEngine(state);
+    expect(after.ramp.targetDays).toBeLessThanOrEqual(3);
+    expect(state.goal?.objective).toBe('build');
+  });
+
+  it('speeds the plan up when told to', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().applyPlanIntent({
+      objective: 'build',
+      speed: 'cautious',
+      fatTolerance: 'some',
+      targetWeightKg: 84,
+    });
+
+    useAppStore.getState().applyVerdictAction({ kind: 'accelerate', toSpeed: 'fast' });
+    expect(useAppStore.getState().goal?.speed).toBe('fast');
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();

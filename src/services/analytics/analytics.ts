@@ -19,7 +19,8 @@ export type AnalyticsEvent =
   | { name: 'momentum_viewed'; state: string }
   | { name: 'recommendation_followed'; type: string }
   | { name: 'muscle_focus_set'; count: number }
-  | { name: 'proposal_applied'; proposal: string };
+  | { name: 'proposal_applied'; proposal: string }
+  | { name: 'plan_reconfigured'; reason: string };
 
 export interface Analytics {
   track(event: AnalyticsEvent): void;
