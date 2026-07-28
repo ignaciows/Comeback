@@ -29,6 +29,7 @@ import {
 import type { FatTolerance, PlanObjective, PlanSpeed } from '@/domain/types';
 import { useBodyWeightSeries, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
+import { snapshotOf, useRecalcStore } from '@/store/useRecalcStore';
 import { formatLongDate } from '@/utils/date';
 import { today as todayOf } from '@/utils/date';
 
@@ -42,12 +43,13 @@ const HORIZONS = [6, 12, 24];
  * how many calories, how long it lasts. Nothing here asks you to know training
  * theory; it shows the consequences of each choice and lets you pick.
  */
-export default function PlanScreen() {
+export default function AdjustPlanScreen() {
   const router = useRouter();
   const engine = useEngine();
   const goal = useAppStore((state) => state.goal);
   const profile = useAppStore((state) => state.profile);
   const applyPlanIntent = useAppStore((state) => state.applyPlanIntent);
+  const armRecalc = useRecalcStore((state) => state.arm);
   const weights = useBodyWeightSeries();
 
   const [objective, setObjective] = useState<PlanObjective>(goal?.objective ?? 'build');
@@ -308,6 +310,9 @@ export default function PlanScreen() {
         label={changed ? 'Use this plan' : 'Plan is up to date'}
         disabled={!changed && targetWeightKg === goal?.targetWeightKg}
         onPress={() => {
+          // Capture the numbers as they stand, so the plan screen can count
+          // from the old target to the new one instead of just showing it.
+          armRecalc(snapshotOf(engine), 'Plan changed');
           applyPlanIntent({
             objective,
             speed,

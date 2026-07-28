@@ -17,7 +17,9 @@ export type AnalyticsEvent =
   | { name: 'exercise_substituted' }
   | { name: 'body_weight_logged' }
   | { name: 'momentum_viewed'; state: string }
-  | { name: 'recommendation_followed'; type: string };
+  | { name: 'recommendation_followed'; type: string }
+  | { name: 'muscle_focus_set'; count: number }
+  | { name: 'proposal_applied'; proposal: string };
 
 export interface Analytics {
   track(event: AnalyticsEvent): void;

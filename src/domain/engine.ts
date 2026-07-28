@@ -15,7 +15,10 @@ import {
   generateDailyRecommendation,
   type RecommendationResult,
 } from './recommendations/generateDailyRecommendation';
+import { deriveObservations, type Observations } from './inference/observations';
+import { deriveProposals, deriveReminder, type Proposal } from './inference/proposals';
 import { adaptToday, type DailyAdaptation } from './training/adaptation';
+import { volumeBreakdown, type MuscleVolume } from './training/volume';
 import { bestE1rmByExercise, sessionSetCount, sessionVolume } from './training/metrics';
 import { sessionMechanics, wasReduced } from './training/sessionMetrics';
 import { observedWeeklyRate } from './plan/observedRate';
@@ -57,6 +60,8 @@ export type EngineInput = {
   bodyMeasurements: BodyMeasurement[];
   baseline: ComebackBaseline | null;
   weekStartsOn: 0 | 1;
+  /** Only needed to notice that the user rests differently than the default. */
+  defaultRestSeconds: number;
 };
 
 export type WeekSummary = {
@@ -104,6 +109,14 @@ export type EngineResult = {
   lastSession: WorkoutSession | null;
   daysSinceLastSession: number | null;
   nextPlanned: PlannedSession | null;
+  /** What the app has worked out about the user without asking. */
+  observations: Observations;
+  /** Changes those observations justify, for the store to apply. */
+  proposals: Proposal[];
+  /** When to nudge, derived from when they actually train. */
+  reminder: ReturnType<typeof deriveReminder>;
+  /** Weekly sets per muscle against the productive range. */
+  volume: MuscleVolume[];
 };
 
 function completedSessions(sessions: WorkoutSession[]): WorkoutSession[] {
@@ -443,6 +456,21 @@ export function runEngine(input: EngineInput): EngineResult {
   const drift = buildDrift(trajectory);
   const routeProgress = buildRouteProgress(input);
 
+  // What the app noticed on its own, and what it wants to do about it.
+  const activeRoutine = activeRoutineOf(input.routines, input.activeRoutineId);
+  const observations = deriveObservations({
+    sessions: input.sessions,
+    routine: activeRoutine,
+    checkins: input.checkins,
+    measurements: input.bodyMeasurements,
+    today: input.today,
+  });
+  const proposals = deriveProposals({
+    observations,
+    training: input.training,
+    preferences: { units: 'metric', defaultRestSeconds: input.defaultRestSeconds, weekStartsOn: input.weekStartsOn },
+  });
+
   return {
     momentumSeries,
     momentum,
@@ -463,6 +491,10 @@ export function runEngine(input: EngineInput): EngineResult {
     lastSession,
     daysSinceLastSession,
     nextPlanned,
+    observations,
+    proposals,
+    reminder: deriveReminder(observations),
+    volume: volumeBreakdown(activeRoutine, input.goal?.muscleFocus ?? []),
   };
 }
 

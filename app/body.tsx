@@ -110,7 +110,7 @@ export default function BodyScreen() {
                 <MetricRow
                   label="Estimated target date"
                   value={formatShortDate(engine.projection.targetDate)}
-                  onPress={() => router.push('/plan')}
+                  onPress={() => router.push('/adjust')}
                 />
               </Section>
             </Reveal>

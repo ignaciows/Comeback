@@ -36,8 +36,12 @@ export default function TodayScreen() {
   const advanceRouteBlock = useAppStore((state) => state.advanceRouteBlock);
   const plannedSessions = useAppStore((state) => state.plannedSessions);
 
+  const applied = useAppStore((state) => state.appliedProposals);
+
   const date = todayOf();
   const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress } = engine;
+  // At most one suggestion here; the rest wait on their own screen.
+  const openProposal = engine.proposals.find((entry) => !applied.includes(entry.id)) ?? null;
   const todayPlanned = plannedSessions.find((entry) => entry.date === date && entry.status === 'planned') ?? null;
   const resting = recommendation.type === 'rest';
 
@@ -167,6 +171,16 @@ export default function TodayScreen() {
               tone={drift.days > 0 ? 'warning' : 'accent'}
               dot
               onPress={() => router.push('/plan')}
+            />
+          ) : null}
+          {/* Something the app worked out that is worth acting on. */}
+          {openProposal ? (
+            <NavRow
+              label={openProposal.headline}
+              detail={openProposal.detail}
+              tone="accent"
+              dot
+              onPress={() => router.push('/knows')}
             />
           ) : null}
           <NavRow

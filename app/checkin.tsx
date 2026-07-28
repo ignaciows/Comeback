@@ -3,10 +3,11 @@ import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 
 import { ActionBar, PrimaryButton, TextButton } from '@/components/Button';
-import { Note } from '@/components/Feedback';
+import { Note, StatusPill } from '@/components/Feedback';
 import { Header } from '@/components/Header';
 import { NumberInput } from '@/components/Input';
 import { Scale } from '@/components/Scale';
+import { MetricRow } from '@/components/Metric';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
 import { spacing } from '@/design-system/tokens';
@@ -31,6 +32,12 @@ export default function CheckinScreen() {
   const [stress, setStress] = useState<number | null>(existing?.stress ?? null);
   const [motivation, setMotivation] = useState<number | null>(existing?.motivation ?? null);
 
+  // Sleep that arrived from the watch is shown, not asked for. Overriding it
+  // is one tap away, because the watch is wrong often enough to matter.
+  const measuredSleep =
+    existing?.sleepHours !== null && existing?.sleepHours !== undefined && existing.source !== 'manual';
+  const [overrideSleep, setOverrideSleep] = useState(false);
+
   const save = () => {
     saveCheckin(todayOf(), { sleepHours, sleepQuality, energy, soreness, stress, motivation });
     router.back();
@@ -48,16 +55,26 @@ export default function CheckinScreen() {
       />
 
       <Section title="Sleep">
-        <NumberInput
-          label="Hours slept"
-          value={sleepHours}
-          onChange={setSleepHours}
-          suffix="h"
-          step={0.5}
-          precision={1}
-          placeholder="7.5"
-          style={styles.field}
-        />
+        {measuredSleep && !overrideSleep ? (
+          <MetricRow
+            label="Hours slept"
+            value={`${sleepHours?.toFixed(1)} h`}
+            accessory={<StatusPill label="From your watch" tone="info" />}
+            onPress={() => setOverrideSleep(true)}
+            style={styles.field}
+          />
+        ) : (
+          <NumberInput
+            label="Hours slept"
+            value={sleepHours}
+            onChange={setSleepHours}
+            suffix="h"
+            step={0.5}
+            precision={1}
+            placeholder="7.5"
+            style={styles.field}
+          />
+        )}
         <Scale label="Sleep quality" value={sleepQuality} onChange={setSleepQuality} anchors={['Broken', 'Deep']} />
       </Section>
 

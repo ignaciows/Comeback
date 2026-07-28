@@ -7,6 +7,7 @@ export type IconName =
   | 'today'
   | 'train'
   | 'progress'
+  | 'plan'
   | 'profile'
   | 'chevronRight'
   | 'chevronLeft'
@@ -58,6 +59,13 @@ export function Icon({ name, size = iconSize.md, color = colors.text, strokeWidt
           <Path d="M4 19V5" {...stroke} />
           <Path d="M4 19h16" {...stroke} />
           <Path d="M7.5 15.5l3.5-4 3 2.5 4.5-6" {...stroke} />
+        </>
+      )}
+      {name === 'plan' && (
+        <>
+          {/* A route with a marker on it: where you are on the way somewhere. */}
+          <Path d="M4 17c4-9 12 3 16-6" {...stroke} />
+          <Circle cx={12} cy={12.6} r={2.4} fill={color} stroke="none" />
         </>
       )}
       {name === 'profile' && (

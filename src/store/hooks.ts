@@ -22,6 +22,7 @@ export function useEngine(): EngineResult {
   const bodyMeasurements = useAppStore((state) => state.bodyMeasurements);
   const baseline = useAppStore((state) => state.comebackBaseline);
   const weekStartsOn = useAppStore((state) => state.preferences.weekStartsOn);
+  const defaultRestSeconds = useAppStore((state) => state.preferences.defaultRestSeconds);
   const persistBaseline = useAppStore((state) => state.persistBaseline);
 
   const date = todayOf();
@@ -42,6 +43,7 @@ export function useEngine(): EngineResult {
         bodyMeasurements,
         baseline,
         weekStartsOn,
+        defaultRestSeconds,
       }),
     [
       date,
@@ -57,6 +59,7 @@ export function useEngine(): EngineResult {
       bodyMeasurements,
       baseline,
       weekStartsOn,
+      defaultRestSeconds,
     ],
   );
 

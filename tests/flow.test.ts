@@ -303,6 +303,125 @@ describe('main flow', () => {
     expect(selectEngine(state).projection).not.toBeNull();
   });
 
+  it('carries v2 state forward without losing the muscle focus field', async () => {
+    // v2 had no `muscleFocus` and no record of applied suggestions. A screen
+    // mapping over `goal.muscleFocus` on undefined is the same class of crash
+    // the v1 gap caused, so the migration has to fill both in.
+    const v2 = {
+      state: {
+        schemaVersion: 2,
+        onboardingCompleted: true,
+        profile: {
+          id: 'p1',
+          name: 'Ignacio',
+          heightCm: 186,
+          experience: 'returning',
+          layoffWeeks: 4,
+          age: null,
+          sex: 'unspecified',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        goal: {
+          id: 'g1',
+          type: 'recomposition',
+          objective: 'recomp',
+          speed: 'steady',
+          fatTolerance: 'some',
+          strategy: 'lean_bulk',
+          targetWeightKg: 80,
+          proteinTargetG: null,
+          horizonWeeks: 16,
+          startedAt: '2026-07-01',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        training: {
+          minDaysPerWeek: 4,
+          preferredDaysPerWeek: 5,
+          sessionMinutes: 60,
+          preferredWeekdays: [1, 2, 3, 5, 6],
+          location: 'gym',
+          gymId: null,
+        },
+        preferences: { units: 'metric', defaultRestSeconds: 120, weekStartsOn: 1 },
+        limitations: null,
+        gyms: [],
+        routines: [],
+        activeRoutineId: null,
+        plannedSessions: [],
+        sessions: [],
+        activeSessionId: null,
+        checkins: [],
+        bodyMeasurements: [
+          { id: 'b1', date: '2026-07-01', weightKg: 77.25, bodyFatPercent: null, source: 'manual', createdAt: '' },
+        ],
+        comebackBaseline: null,
+        phases: [
+          {
+            id: 'ph1',
+            strategy: 'lean_bulk',
+            startedAt: '2026-07-01',
+            endedAt: null,
+            startWeightKg: 77.25,
+            endWeightKg: null,
+            targetWeightKg: 80,
+            note: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+        planRoute: null,
+      },
+      version: 2,
+    };
+    memory.set(STORAGE_KEY, JSON.stringify(v2));
+
+    await useAppStore.persist.rehydrate();
+    const state = useAppStore.getState();
+
+    expect(state.goal?.muscleFocus).toEqual([]);
+    expect(state.appliedProposals).toEqual([]);
+    // What v2 already had is untouched.
+    expect(state.goal?.strategy).toBe('lean_bulk');
+    expect(state.phases).toHaveLength(1);
+    expect(() => selectEngine(state)).not.toThrow();
+    expect(selectEngine(state).volume.length).toBeGreaterThan(0);
+  });
+
+  it('rebuilds the routine around the muscles you pick', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    const before = useAppStore.getState();
+    const routineId = before.activeRoutineId;
+    const setsFor = (muscle: 'shoulders') =>
+      selectEngine(useAppStore.getState()).volume.find((entry) => entry.muscle === muscle)?.sets ?? 0;
+
+    const wasShoulders = setsFor('shoulders');
+    useAppStore.getState().setMuscleFocus(['shoulders']);
+    const after = useAppStore.getState();
+
+    expect(after.goal?.muscleFocus).toEqual(['shoulders']);
+    expect(setsFor('shoulders')).toBeGreaterThan(wasShoulders);
+    // The routine is rewritten in place, so history keeps pointing at it.
+    expect(after.activeRoutineId).toBe(routineId);
+    expect(selectEngine(after).volume.find((entry) => entry.muscle === 'shoulders')?.focused).toBe(true);
+  });
+
+  it('applies a suggestion the app worked out and stops offering it', () => {
+    const proposal = {
+      id: 'rest_seconds',
+      kind: 'auto' as const,
+      headline: 'You rest about 150 seconds',
+      detail: 'Matching what you do.',
+      change: { type: 'rest_seconds' as const, seconds: 150 },
+    };
+
+    useAppStore.getState().applyProposal(proposal);
+    const state = useAppStore.getState();
+
+    expect(state.preferences.defaultRestSeconds).toBe(150);
+    expect(state.appliedProposals).toContain('rest_seconds');
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();

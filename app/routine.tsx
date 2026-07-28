@@ -14,6 +14,7 @@ import { colors, opacity, spacing } from '@/design-system/tokens';
 import { EXERCISES, exerciseName, findSubstitutions, searchExercises } from '@/data/exercises';
 import { estimateRoutineDayMinutes } from '@/data/routineTemplates';
 import { useActiveRoutine } from '@/store/hooks';
+import { ExerciseRow } from '@/features/training/ExerciseRow';
 import { useAppStore } from '@/store/useAppStore';
 
 type Target = { dayId: string; exerciseId: string; routineExerciseId: string } | null;
@@ -154,12 +155,9 @@ export default function RoutineScreen() {
               });
               setSubstituting(null);
             }}
-            style={({ pressed }) => [styles.option, pressed && { opacity: opacity.pressed }]}
+            style={({ pressed }) => [pressed && { opacity: opacity.pressed }]}
           >
-            <Text variant="body">{option.exercise.name}</Text>
-            <Text variant="caption" tone="tertiary">
-              {option.reason}
-            </Text>
+            <ExerciseRow exercise={option.exercise} detail={option.reason} unavailable={!option.availableHere} />
           </Pressable>
         ))}
       </BottomSheet>

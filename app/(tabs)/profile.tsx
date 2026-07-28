@@ -42,7 +42,7 @@ export default function ProfileScreen() {
             label="Plan"
             value={goal ? strategyProfile(goal.strategy).label : '—'}
             detail={goal?.targetWeightKg ? `Target ${goal.targetWeightKg.toFixed(1)} kg` : 'No target set'}
-            onPress={() => router.push('/plan')}
+            onPress={() => router.push('/adjust')}
           />
           <NavRow
             label="Compare plans"

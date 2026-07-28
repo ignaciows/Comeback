@@ -11,12 +11,129 @@ import type { MuscleGroup } from '@/domain/types';
  *
  * A stylised figure rather than an anatomical illustration: it has to read at
  * a glance, on a phone, between sets, and it has to be drawn in the app's own
- * language instead of a stock photo. Primary muscles take the accent, the ones
- * that help take a muted version, everything else stays quiet.
+ * language instead of a stock photo.
  *
- * Fully procedural — no image assets, so it scales to any size and works
- * offline.
+ * The geometry is declared once as data so the same body serves both jobs —
+ * showing what an exercise hits, and letting the user tap the muscles they
+ * want the plan built around. Fully procedural: no image assets, sharp at any
+ * size, works offline.
  */
+
+type Shape =
+  | { kind: 'circle'; cx: number; cy: number; r: number }
+  | { kind: 'ellipse'; cx: number; cy: number; rx: number; ry: number }
+  | { kind: 'rect'; x: number; y: number; width: number; height: number; rx: number };
+
+/** `muscle: null` means a part that is drawn but never highlighted. */
+type Part = { muscle: MuscleGroup | null; shape: Shape };
+
+const rect = (x: number, y: number, width: number, height: number, rx: number): Shape => ({
+  kind: 'rect',
+  x,
+  y,
+  width,
+  height,
+  rx,
+});
+
+const FRONT_PARTS: Part[] = [
+  { muscle: null, shape: { kind: 'circle', cx: 50, cy: 15, r: 11 } },
+  { muscle: null, shape: rect(44, 25, 12, 9, 3) },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 27, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 73, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'chest', shape: rect(33, 37, 15, 20, 6) },
+  { muscle: 'chest', shape: rect(52, 37, 15, 20, 6) },
+  { muscle: 'core', shape: rect(39, 60, 22, 34, 7) },
+  { muscle: 'biceps', shape: rect(19, 57, 11, 24, 5) },
+  { muscle: 'biceps', shape: rect(70, 57, 11, 24, 5) },
+  { muscle: null, shape: rect(17, 83, 9, 24, 4) },
+  { muscle: null, shape: rect(74, 83, 9, 24, 4) },
+  { muscle: 'quads', shape: rect(35, 97, 13, 40, 6) },
+  { muscle: 'quads', shape: rect(52, 97, 13, 40, 6) },
+  { muscle: 'calves', shape: rect(36, 140, 11, 32, 5) },
+  { muscle: 'calves', shape: rect(53, 140, 11, 32, 5) },
+];
+
+const BACK_PARTS: Part[] = [
+  { muscle: null, shape: { kind: 'circle', cx: 50, cy: 15, r: 11 } },
+  { muscle: null, shape: rect(44, 25, 12, 9, 3) },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 27, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 73, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'back', shape: rect(35, 36, 30, 20, 8) },
+  { muscle: 'back', shape: rect(31, 54, 16, 26, 6) },
+  { muscle: 'back', shape: rect(53, 54, 16, 26, 6) },
+  // The lower back is trained by the same work as the core, and grouped with it.
+  { muscle: 'core', shape: rect(41, 80, 18, 12, 5) },
+  { muscle: 'triceps', shape: rect(19, 57, 11, 24, 5) },
+  { muscle: 'triceps', shape: rect(70, 57, 11, 24, 5) },
+  { muscle: null, shape: rect(17, 83, 9, 24, 4) },
+  { muscle: null, shape: rect(74, 83, 9, 24, 4) },
+  { muscle: 'glutes', shape: rect(35, 94, 30, 20, 9) },
+  { muscle: 'hamstrings', shape: rect(35, 116, 13, 26, 6) },
+  { muscle: 'hamstrings', shape: rect(52, 116, 13, 26, 6) },
+  { muscle: 'calves', shape: rect(36, 144, 11, 28, 5) },
+  { muscle: 'calves', shape: rect(53, 144, 11, 28, 5) },
+];
+
+/** Muscles visible from each side, derived from the geometry itself. */
+const FRONT_MUSCLES = [...new Set(FRONT_PARTS.map((part) => part.muscle).filter(Boolean))] as MuscleGroup[];
+const BACK_MUSCLES = [...new Set(BACK_PARTS.map((part) => part.muscle).filter(Boolean))] as MuscleGroup[];
+
+/** The single view that shows a muscle, for places with room for only one. */
+export function preferredView(muscle: MuscleGroup): 'front' | 'back' {
+  return FRONT_MUSCLES.includes(muscle) ? 'front' : 'back';
+}
+
+function Figure({
+  parts,
+  width,
+  fillOf,
+  onPressMuscle,
+}: {
+  parts: Part[];
+  width: number;
+  fillOf: (muscle: MuscleGroup | null) => string;
+  onPressMuscle?: (muscle: MuscleGroup) => void;
+}) {
+  return (
+    <Svg width={width} height={width * 2} viewBox="0 0 100 200">
+      {parts.map((part, index) => {
+        const fill = fillOf(part.muscle);
+        const press = part.muscle && onPressMuscle ? () => onPressMuscle(part.muscle as MuscleGroup) : undefined;
+        const key = `${part.muscle ?? 'inert'}-${index}`;
+
+        if (part.shape.kind === 'circle') {
+          return <Circle key={key} cx={part.shape.cx} cy={part.shape.cy} r={part.shape.r} fill={fill} onPress={press} />;
+        }
+        if (part.shape.kind === 'ellipse') {
+          return (
+            <Ellipse
+              key={key}
+              cx={part.shape.cx}
+              cy={part.shape.cy}
+              rx={part.shape.rx}
+              ry={part.shape.ry}
+              fill={fill}
+              onPress={press}
+            />
+          );
+        }
+        return (
+          <Rect
+            key={key}
+            x={part.shape.x}
+            y={part.shape.y}
+            width={part.shape.width}
+            height={part.shape.height}
+            rx={part.shape.rx}
+            fill={fill}
+            onPress={press}
+          />
+        );
+      })}
+    </Svg>
+  );
+}
 
 type Props = {
   primary: MuscleGroup;
@@ -28,94 +145,7 @@ type Props = {
   style?: ViewStyle;
 };
 
-/** Muscles visible from each side. Anything else is drawn inactive. */
-const FRONT_MUSCLES: MuscleGroup[] = ['chest', 'shoulders', 'biceps', 'core', 'quads', 'calves'];
-const BACK_MUSCLES: MuscleGroup[] = ['back', 'shoulders', 'triceps', 'glutes', 'hamstrings', 'calves'];
-
-function fillFor(muscle: MuscleGroup, primary: MuscleGroup, secondary: MuscleGroup[]): string {
-  if (muscle === primary) return colors.accent;
-  if (secondary.includes(muscle)) return colors.accentMuted;
-  return colors.surfaceRaised;
-}
-
-function FrontFigure({ primary, secondary, width }: { primary: MuscleGroup; secondary: MuscleGroup[]; width: number }) {
-  const fill = (muscle: MuscleGroup) => fillFor(muscle, primary, secondary);
-  const inert = colors.surfaceRaised;
-
-  return (
-    <Svg width={width} height={width * 2} viewBox="0 0 100 200">
-      {/* Head and neck are never highlighted. */}
-      <Circle cx={50} cy={15} r={11} fill={inert} />
-      <Rect x={44} y={25} width={12} height={9} rx={3} fill={inert} />
-
-      {/* Shoulders */}
-      <Ellipse cx={27} cy={45} rx={11} ry={9} fill={fill('shoulders')} />
-      <Ellipse cx={73} cy={45} rx={11} ry={9} fill={fill('shoulders')} />
-
-      {/* Chest */}
-      <Rect x={33} y={37} width={15} height={20} rx={6} fill={fill('chest')} />
-      <Rect x={52} y={37} width={15} height={20} rx={6} fill={fill('chest')} />
-
-      {/* Core */}
-      <Rect x={39} y={60} width={22} height={34} rx={7} fill={fill('core')} />
-
-      {/* Biceps and forearms */}
-      <Rect x={19} y={57} width={11} height={24} rx={5} fill={fill('biceps')} />
-      <Rect x={70} y={57} width={11} height={24} rx={5} fill={fill('biceps')} />
-      <Rect x={17} y={83} width={9} height={24} rx={4} fill={inert} />
-      <Rect x={74} y={83} width={9} height={24} rx={4} fill={inert} />
-
-      {/* Quads */}
-      <Rect x={35} y={97} width={13} height={40} rx={6} fill={fill('quads')} />
-      <Rect x={52} y={97} width={13} height={40} rx={6} fill={fill('quads')} />
-
-      {/* Calves */}
-      <Rect x={36} y={140} width={11} height={32} rx={5} fill={fill('calves')} />
-      <Rect x={53} y={140} width={11} height={32} rx={5} fill={fill('calves')} />
-    </Svg>
-  );
-}
-
-function BackFigure({ primary, secondary, width }: { primary: MuscleGroup; secondary: MuscleGroup[]; width: number }) {
-  const fill = (muscle: MuscleGroup) => fillFor(muscle, primary, secondary);
-  const inert = colors.surfaceRaised;
-
-  return (
-    <Svg width={width} height={width * 2} viewBox="0 0 100 200">
-      <Circle cx={50} cy={15} r={11} fill={inert} />
-      <Rect x={44} y={25} width={12} height={9} rx={3} fill={inert} />
-
-      <Ellipse cx={27} cy={45} rx={11} ry={9} fill={fill('shoulders')} />
-      <Ellipse cx={73} cy={45} rx={11} ry={9} fill={fill('shoulders')} />
-
-      {/* Upper back and lats */}
-      <Rect x={35} y={36} width={30} height={20} rx={8} fill={fill('back')} />
-      <Rect x={31} y={54} width={16} height={26} rx={6} fill={fill('back')} />
-      <Rect x={53} y={54} width={16} height={26} rx={6} fill={fill('back')} />
-
-      {/* Lower back sits with the core group */}
-      <Rect x={41} y={80} width={18} height={12} rx={5} fill={fill('core')} />
-
-      {/* Triceps and forearms */}
-      <Rect x={19} y={57} width={11} height={24} rx={5} fill={fill('triceps')} />
-      <Rect x={70} y={57} width={11} height={24} rx={5} fill={fill('triceps')} />
-      <Rect x={17} y={83} width={9} height={24} rx={4} fill={inert} />
-      <Rect x={74} y={83} width={9} height={24} rx={4} fill={inert} />
-
-      {/* Glutes */}
-      <Rect x={35} y={94} width={30} height={20} rx={9} fill={fill('glutes')} />
-
-      {/* Hamstrings */}
-      <Rect x={35} y={116} width={13} height={26} rx={6} fill={fill('hamstrings')} />
-      <Rect x={52} y={116} width={13} height={26} rx={6} fill={fill('hamstrings')} />
-
-      {/* Calves */}
-      <Rect x={36} y={144} width={11} height={28} rx={5} fill={fill('calves')} />
-      <Rect x={53} y={144} width={11} height={28} rx={5} fill={fill('calves')} />
-    </Svg>
-  );
-}
-
+/** What one exercise works: the mover in the accent, its helpers muted. */
 export function MuscleMap({
   primary,
   secondary = [],
@@ -125,9 +155,17 @@ export function MuscleMap({
   style,
 }: Props) {
   const width = height / 2;
+  const fillOf = (muscle: MuscleGroup | null) => {
+    if (muscle === null) return colors.surfaceRaised;
+    if (muscle === primary) return colors.accent;
+    if (secondary.includes(muscle)) return colors.accentMuted;
+    return colors.surfaceRaised;
+  };
+
   const showFront =
     view === 'front' ||
-    (view === 'both' && (FRONT_MUSCLES.includes(primary) || secondary.some((muscle) => FRONT_MUSCLES.includes(muscle))));
+    (view === 'both' &&
+      (FRONT_MUSCLES.includes(primary) || secondary.some((muscle) => FRONT_MUSCLES.includes(muscle))));
   const showBack =
     view === 'back' ||
     (view === 'both' && (BACK_MUSCLES.includes(primary) || secondary.some((muscle) => BACK_MUSCLES.includes(muscle))));
@@ -137,13 +175,13 @@ export function MuscleMap({
       <View style={styles.figures}>
         {showFront ? (
           <View style={styles.figure}>
-            <FrontFigure primary={primary} secondary={secondary} width={width} />
+            <Figure parts={FRONT_PARTS} width={width} fillOf={fillOf} />
             <Label style={styles.viewLabel}>Front</Label>
           </View>
         ) : null}
         {showBack ? (
           <View style={styles.figure}>
-            <BackFigure primary={primary} secondary={secondary} width={width} />
+            <Figure parts={BACK_PARTS} width={width} fillOf={fillOf} />
             <Label style={styles.viewLabel}>Back</Label>
           </View>
         ) : null}
@@ -167,6 +205,75 @@ export function MuscleMap({
           ))}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+type PickerProps = {
+  selected: MuscleGroup[];
+  onToggle: (muscle: MuscleGroup) => void;
+  height?: number;
+  style?: ViewStyle;
+};
+
+/**
+ * The same body, used as the control. Tapping a muscle picks it — no list, no
+ * checkboxes, nothing to read to understand what the tap does.
+ */
+export function MusclePicker({ selected, onToggle, height = 220, style }: PickerProps) {
+  const width = height / 2;
+  const fillOf = (muscle: MuscleGroup | null) => {
+    if (muscle === null) return colors.surfaceRaised;
+    return selected.includes(muscle) ? colors.accent : colors.borderStrong;
+  };
+
+  return (
+    <View style={[styles.figures, style]}>
+      <View style={styles.figure}>
+        <Figure parts={FRONT_PARTS} width={width} fillOf={fillOf} onPressMuscle={onToggle} />
+        <Label style={styles.viewLabel}>Front</Label>
+      </View>
+      <View style={styles.figure}>
+        <Figure parts={BACK_PARTS} width={width} fillOf={fillOf} onPressMuscle={onToggle} />
+        <Label style={styles.viewLabel}>Back</Label>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A body shaded by how much weekly volume each muscle gets. Reading it needs
+ * no numbers: bright is trained hard, dim is barely trained.
+ */
+export function MuscleHeatmap({
+  setsByMuscle,
+  height = 200,
+  style,
+}: {
+  setsByMuscle: Partial<Record<MuscleGroup, number>>;
+  height?: number;
+  style?: ViewStyle;
+}) {
+  const width = height / 2;
+  const peak = Math.max(1, ...Object.values(setsByMuscle).map((value) => value ?? 0));
+
+  const fillOf = (muscle: MuscleGroup | null) => {
+    if (muscle === null) return colors.surfaceRaised;
+    const share = (setsByMuscle[muscle] ?? 0) / peak;
+    // Steps, not a gradient: a glance between sets resolves steps, not shades.
+    if (share <= 0) return colors.surfaceRaised;
+    if (share < 0.5) return colors.accentMuted;
+    return colors.accent;
+  };
+
+  return (
+    <View style={[styles.figures, style]}>
+      <View style={styles.figure}>
+        <Figure parts={FRONT_PARTS} width={width} fillOf={fillOf} />
+      </View>
+      <View style={styles.figure}>
+        <Figure parts={BACK_PARTS} width={width} fillOf={fillOf} />
+      </View>
     </View>
   );
 }

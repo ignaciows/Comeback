@@ -18,6 +18,7 @@ import { EXERCISES, exerciseName, findSubstitutions, getExercise, searchExercise
 import type { WorkoutExercise } from '@/domain/types';
 import { FormGuideSheet } from '@/features/training/FormGuide';
 import { formatPreviousSet, previousPerformance } from '@/features/training/history';
+import { ExerciseRow } from '@/features/training/ExerciseRow';
 import { RestTimer } from '@/features/training/RestTimer';
 import { SetRow } from '@/features/training/SetRow';
 import { useSession } from '@/store/hooks';
@@ -323,15 +324,13 @@ export default function SessionScreen() {
               substituteExercise(session.id, substituting.id, option.exercise.id);
               setSubstituting(null);
             }}
-            style={({ pressed }) => [styles.option, pressed && { opacity: opacity.pressed }]}
+            style={({ pressed }) => [pressed && { opacity: opacity.pressed }]}
           >
-            <View style={styles.optionText}>
-              <Text variant="body">{option.exercise.name}</Text>
-              <Text variant="caption" tone="tertiary">
-                {option.reason}
-              </Text>
-            </View>
-            {!option.availableHere ? <StatusPill label="Not at your gym" tone="warning" /> : null}
+            <ExerciseRow
+              exercise={option.exercise}
+              detail={option.reason}
+              unavailable={!option.availableHere}
+            />
           </Pressable>
         ))}
       </BottomSheet>

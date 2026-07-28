@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { StatusPill } from '@/components/Feedback';
+import { Header } from '@/components/Header';
 import { AnimatedNumber } from '@/components/motion/AnimatedNumber';
 import { Reveal } from '@/components/motion/Reveal';
 import { NavGroup, NavRow } from '@/components/NavRow';
@@ -9,29 +10,26 @@ import { Screen } from '@/components/Screen';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { momentumStateLabel } from '@/domain/momentum/calculateMomentum';
-import { strategyProfile } from '@/domain/plan/strategies';
 import { useBodyWeightSeries, useCompletedSessions, useEngine } from '@/store/hooks';
-import { useAppStore } from '@/store/useAppStore';
 
-/** One headline number, then rows. Every detail lives one tap deeper. */
+/**
+ * One headline number, then rows. Every detail lives one tap deeper.
+ *
+ * Reached from the plan rather than living in the tab bar: how the comeback is
+ * going is something you look up, not something you need on every launch.
+ */
 export default function ProgressScreen() {
   const router = useRouter();
   const engine = useEngine();
   const sessions = useCompletedSessions();
   const weights = useBodyWeightSeries();
-  const goal = useAppStore((state) => state.goal);
 
   const latestWeight = weights[weights.length - 1] ?? null;
   const comeback = engine.comeback;
-  const days = engine.projection?.daysRemaining ?? null;
 
   return (
     <Screen>
-      <Reveal index={0}>
-        <Text variant="title" style={styles.title}>
-          Progress
-        </Text>
-      </Reveal>
+      <Header title="Progress" leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }} />
 
       <Reveal index={1}>
         <View style={styles.hero}>
@@ -86,12 +84,6 @@ export default function ProgressScreen() {
             detail="Volume and lifts"
             onPress={() => router.push('/performance')}
           />
-          <NavRow
-            label="Plan"
-            value={days === null ? '—' : `${days} days`}
-            detail={goal ? strategyProfile(goal.strategy).label : undefined}
-            onPress={() => router.push('/plan')}
-          />
         </NavGroup>
       </Reveal>
     </Screen>
@@ -99,9 +91,6 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    marginBottom: spacing.xl,
-  },
   hero: {
     borderRadius: radius.xl,
     borderWidth: borderWidth.hairline,

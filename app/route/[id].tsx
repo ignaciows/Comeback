@@ -16,8 +16,9 @@ import { colors, spacing } from '@/design-system/tokens';
 import { PROJECTION_CAVEAT } from '@/data/trainingPrinciples';
 import { getRoute, simulateRoute, type RouteInput } from '@/domain/plan/routes';
 import { RouteChart } from '@/features/plan/RouteChart';
-import { useBodyWeightSeries } from '@/store/hooks';
+import { useBodyWeightSeries, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
+import { snapshotOf, useRecalcStore } from '@/store/useRecalcStore';
 import { formatLongDate, today as todayOf } from '@/utils/date';
 
 /** One route in full: the curve, every block, and what each block asks for. */
@@ -28,6 +29,8 @@ export default function RouteDetailScreen() {
   const training = useAppStore((state) => state.training);
   const planRoute = useAppStore((state) => state.planRoute);
   const applyRoute = useAppStore((state) => state.applyRoute);
+  const armRecalc = useRecalcStore((state) => state.arm);
+  const engine = useEngine();
   const weights = useBodyWeightSeries();
 
   const [confirm, setConfirm] = useState(false);
@@ -171,6 +174,7 @@ export default function RouteDetailScreen() {
         message={`The first block is ${simulation.blocks[0].label.toLowerCase()} for ${simulation.blocks[0].weeks} weeks at ${simulation.blocks[0].kcal} kcal. Your training days change to match it, and everything you have already logged carries over.`}
         confirmLabel="Start this plan"
         onConfirm={() => {
+          armRecalc(snapshotOf(engine), `Started ${route.name}`);
           applyRoute(route.id);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           router.back();

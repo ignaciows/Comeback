@@ -9,7 +9,9 @@ import { defaultStrategyFor } from '@/domain/plan/strategies';
 import { simulatePlan } from '@/domain/plan/simulate';
 import { getRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
+import type { Proposal } from '@/domain/inference/proposals';
 import { adaptSetCount } from '@/domain/training/adaptation';
+import { applyEmphasis } from '@/domain/training/volume';
 import type {
   BodyMeasurement,
   ComebackBaseline,
@@ -20,6 +22,7 @@ import type {
   FatTolerance,
   Gym,
   ISODate,
+  MuscleGroup,
   NutritionStrategy,
   PlanObjective,
   PlanSpeed,
@@ -88,6 +91,7 @@ export type OnboardingPayload = {
   speed: PlanSpeed;
   fatTolerance: FatTolerance;
   strategy?: NutritionStrategy;
+  muscleFocus?: MuscleGroup[];
   targetWeightKg: number | null;
   horizonWeeks: number;
   daysPerWeek: number;
@@ -125,6 +129,8 @@ export type AppState = {
   phases: PlanPhase[];
   /** The multi-block route being followed, if any. */
   planRoute: { routeId: string; startedAt: ISODate } | null;
+  /** Suggestion ids already applied or dismissed, so they stop coming back. */
+  appliedProposals: string[];
 };
 
 type Actions = {
@@ -204,6 +210,11 @@ type Actions = {
     weights: BodyMeasurement[];
     sleep: { date: ISODate; hours: number }[];
   }) => void;
+  /** Biases the routine towards the muscles the user picked. */
+  setMuscleFocus: (muscles: MuscleGroup[]) => void;
+  /** Applies a change the app worked out on its own. */
+  applyProposal: (proposal: Proposal) => void;
+  dismissProposal: (id: string) => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
   resetAll: () => void;
@@ -212,7 +223,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -231,6 +242,7 @@ const initialState: AppState = {
   comebackBaseline: null,
   phases: [],
   planRoute: null,
+  appliedProposals: [],
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -285,6 +297,12 @@ function reindex<T extends { order: number }>(items: T[]): T[] {
   return items.map((item, index) => ({ ...item, order: index }));
 }
 
+/** Equipment at the gym the user trains in, empty when none is set. */
+function equipmentOf(state: AppState): Record<string, EquipmentAvailability> {
+  const gym = state.gyms.find((entry) => entry.id === state.training.gymId) ?? state.gyms[0] ?? null;
+  return gym?.equipment ?? {};
+}
+
 export const useAppStore = create<Store>()(
   persist(
     (set, get) => ({
@@ -317,6 +335,7 @@ export const useAppStore = create<Store>()(
           speed: payload.speed,
           fatTolerance: payload.fatTolerance,
           strategy,
+          muscleFocus: payload.muscleFocus ?? [],
           targetWeightKg: payload.targetWeightKg,
           proteinTargetG: null,
           horizonWeeks: payload.horizonWeeks,
@@ -560,13 +579,15 @@ export const useAppStore = create<Store>()(
       regenerateRoutine: () => {
         const state = get();
         if (!state.goal || !state.profile) return;
-        const routine = buildInitialRoutine({
+        const base = buildInitialRoutine({
           daysPerWeek: state.training.preferredDaysPerWeek,
           sessionMinutes: state.training.sessionMinutes,
           location: state.training.location,
           goalType: state.goal.type,
           layoffWeeks: state.profile.layoffWeeks,
         });
+        // The template is balanced; the user's chosen muscles tilt it.
+        const routine = applyEmphasis(base, state.goal.muscleFocus ?? [], equipmentOf(state)).routine;
         set((current) => ({
           routines: [...current.routines.map((entry) => ({ ...entry, deletedAt: nowISO() })), routine],
           activeRoutineId: routine.id,
@@ -715,6 +736,7 @@ export const useAppStore = create<Store>()(
           bodyMeasurements: state.bodyMeasurements,
           baseline: state.comebackBaseline,
           weekStartsOn: state.preferences.weekStartsOn,
+          defaultRestSeconds: state.preferences.defaultRestSeconds,
         }).adaptation;
         const routine =
           state.routines.find((entry) => entry.id === routineId) ??
@@ -1196,6 +1218,95 @@ export const useAppStore = create<Store>()(
         });
       },
 
+      /**
+       * Picking muscles rewrites the live routine rather than waiting for the
+       * next regeneration — the user changed something and expects the app to
+       * be different when they look at it.
+       */
+      setMuscleFocus: (muscles) => {
+        const state = get();
+        if (!state.goal) return;
+
+        set({ goal: { ...state.goal, muscleFocus: muscles, updatedAt: nowISO() } });
+
+        const routine = state.routines.find((entry) => entry.id === state.activeRoutineId) ?? null;
+        if (!routine || !state.profile) return;
+
+        // Rebuild from the balanced template so switching focus does not
+        // accumulate sets from every previous choice.
+        const base = buildInitialRoutine({
+          daysPerWeek: state.training.preferredDaysPerWeek,
+          sessionMinutes: state.training.sessionMinutes,
+          location: state.training.location,
+          goalType: state.goal.type,
+          layoffWeeks: state.profile.layoffWeeks,
+        });
+        const emphasised = applyEmphasis(base, muscles, equipmentOf(state)).routine;
+        const next: Routine = { ...emphasised, id: routine.id, createdAt: routine.createdAt, updatedAt: nowISO() };
+
+        set((current) => ({
+          routines: current.routines.map((entry) => (entry.id === routine.id ? next : entry)),
+        }));
+        track({ name: 'muscle_focus_set', count: muscles.length });
+      },
+
+      applyProposal: (proposal) => {
+        const change = proposal.change;
+
+        switch (change.type) {
+          case 'training_weekdays':
+            set((state) => ({
+              training: { ...state.training, preferredWeekdays: change.weekdays },
+              plannedSessions: keepPastAndResolved(state.plannedSessions, todayOf()),
+            }));
+            get().ensurePlan();
+            break;
+
+          case 'days_per_week':
+            set((state) => ({
+              training: {
+                ...state.training,
+                preferredDaysPerWeek: change.days,
+                preferredWeekdays: WEEKDAYS_FOR[change.days] ?? state.training.preferredWeekdays,
+              },
+              plannedSessions: keepPastAndResolved(state.plannedSessions, todayOf()),
+            }));
+            get().regenerateRoutine();
+            break;
+
+          case 'session_minutes':
+            set((state) => ({ training: { ...state.training, sessionMinutes: change.minutes } }));
+            break;
+
+          case 'rest_seconds':
+            set((state) => ({
+              preferences: { ...state.preferences, defaultRestSeconds: change.seconds },
+            }));
+            break;
+
+          case 'drop_exercise':
+            set((state) => ({
+              routines: state.routines.map((routine) => ({
+                ...routine,
+                updatedAt: nowISO(),
+                days: routine.days.map((day) => ({
+                  ...day,
+                  exercises: reindex(
+                    day.exercises.filter((entry) => entry.exerciseId !== change.exerciseId),
+                  ),
+                })),
+              })),
+            }));
+            break;
+        }
+
+        set((state) => ({ appliedProposals: [...state.appliedProposals, proposal.id] }));
+        track({ name: 'proposal_applied', proposal: proposal.id });
+      },
+
+      dismissProposal: (id) =>
+        set((state) => ({ appliedProposals: [...state.appliedProposals, id] })),
+
       persistBaseline: (baseline) => set({ comebackBaseline: baseline }),
 
       /**
@@ -1313,7 +1424,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 2,
+      version: 3,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1322,7 +1433,18 @@ export const useAppStore = create<Store>()(
       migrate: (persisted, fromVersion) => {
         const state = persisted as Partial<AppState> | undefined;
         if (!state) return initialState;
-        if (fromVersion >= 2) return state as AppState;
+
+        // v3 added muscle focus and the record of applied suggestions.
+        const toV3 = (value: Partial<AppState>): AppState =>
+          ({
+            ...value,
+            schemaVersion: 3,
+            appliedProposals: value.appliedProposals ?? [],
+            goal: value.goal ? { ...value.goal, muscleFocus: value.goal.muscleFocus ?? [] } : value.goal,
+          }) as AppState;
+
+        if (fromVersion >= 3) return state as AppState;
+        if (fromVersion === 2) return toV3(state);
 
         const strategy =
           state.goal?.strategy ?? (state.goal ? defaultStrategyFor(state.goal.type) : 'maintain');
@@ -1330,9 +1452,8 @@ export const useAppStore = create<Store>()(
         const startWeightKg =
           [...(state.bodyMeasurements ?? [])].sort((a, b) => (a.date < b.date ? -1 : 1))[0]?.weightKg ?? 0;
 
-        return {
+        return toV3({
           ...state,
-          schemaVersion: 2,
           profile: state.profile
             ? { ...state.profile, age: state.profile.age ?? null, sex: state.profile.sex ?? 'unspecified' }
             : state.profile,
@@ -1369,7 +1490,7 @@ export const useAppStore = create<Store>()(
                     },
                   ]
                 : [],
-        } as AppState;
+        } as AppState);
       },
       // `hydrated` is runtime-only; everything else is persisted.
       partialize: ({ hydrated, ...rest }) => rest,
@@ -1405,6 +1526,7 @@ export function selectEngine(state: AppState) {
     bodyMeasurements: state.bodyMeasurements,
     baseline: state.comebackBaseline,
     weekStartsOn: state.preferences.weekStartsOn,
+    defaultRestSeconds: state.preferences.defaultRestSeconds,
   });
 }
 

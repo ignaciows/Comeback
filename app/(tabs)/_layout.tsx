@@ -7,7 +7,7 @@ import { colors, typography } from '@/design-system/tokens';
 const TABS: { name: string; title: string; icon: IconName }[] = [
   { name: 'today', title: 'Today', icon: 'today' },
   { name: 'train', title: 'Train', icon: 'train' },
-  { name: 'progress', title: 'Progress', icon: 'progress' },
+  { name: 'plan', title: 'Plan', icon: 'plan' },
   { name: 'profile', title: 'Profile', icon: 'profile' },
 ];
 

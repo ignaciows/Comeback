@@ -105,6 +105,8 @@ export interface Goal {
   fatTolerance: FatTolerance;
   /** Derived from the three above. Drives every projection. */
   strategy: NutritionStrategy;
+  /** Muscles to bias volume towards. Empty means a balanced routine. */
+  muscleFocus: MuscleGroup[];
   targetWeightKg: number | null;
   proteinTargetG: number | null;
   /** Horizon the user is working towards, in weeks. Drives the target date. */
