@@ -4,9 +4,9 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { EmptyState, Note, StatusPill } from '@/components/Feedback';
 import { Header } from '@/components/Header';
-import { MetricRow } from '@/components/Metric';
 import { Reveal } from '@/components/motion/Reveal';
 import { Screen } from '@/components/Screen';
+import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { recommendRoute, simulateAllRoutes, type RouteInput } from '@/domain/plan/routes';
@@ -154,13 +154,20 @@ export default function RoutesScreen() {
         })}
       </View>
 
-      <MetricRow
-        label="None of these? Build your own"
-        detail="Drag the blocks and watch it recalculate"
+      <Pressable
         onPress={() => router.push('/builder')}
-        chevron
-        style={styles.build}
-      />
+        accessibilityRole="button"
+        accessibilityLabel="Build your own plan"
+        style={({ pressed }) => [styles.build, pressed && { opacity: opacity.pressed }]}
+      >
+        <Icon name="edit" size={22} color={colors.textSecondary} />
+        <Text variant="heading" style={styles.buildTitle}>
+          Build your own
+        </Text>
+        <Text variant="bodySmall" tone="secondary">
+          Drag the blocks. Everything recalculates as you move them.
+        </Text>
+      </Pressable>
 
       <Note style={styles.note}>
         Estimates, simulated week by week with muscle gain capped at what training can build. They move as your data comes in.
@@ -228,6 +235,15 @@ const styles = StyleSheet.create({
   },
   build: {
     marginTop: spacing.xl,
+    borderRadius: radius.xl,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  buildTitle: {
+    marginTop: spacing.sm,
   },
   note: {
     marginTop: spacing.xl,

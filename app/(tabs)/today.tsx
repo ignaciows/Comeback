@@ -7,6 +7,7 @@ import { StatusPill } from '@/components/Feedback';
 import { LiveDot } from '@/components/motion/Pulse';
 import { Reveal } from '@/components/motion/Reveal';
 import { NavGroup, NavRow } from '@/components/NavRow';
+import { SetupList } from '@/features/onboarding/NextStepCard';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
@@ -14,7 +15,7 @@ import { momentumStateLabel } from '@/domain/momentum/calculateMomentum';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { readinessLabel } from '@/domain/readiness/calculateReadiness';
 import { track } from '@/services/analytics/analytics';
-import { useActiveSession, useEngine, useTodayCheckin } from '@/store/hooks';
+import { useActiveSession, useEngine, useNextStep, useTodayCheckin } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 import { addDays, formatLongDate, greetingFor, today as todayOf } from '@/utils/date';
 
@@ -38,6 +39,7 @@ export default function TodayScreen() {
 
   const applied = useAppStore((state) => state.appliedProposals);
   const hasGym = useAppStore((state) => state.gyms.length > 0);
+  const { setup } = useNextStep();
 
   const date = todayOf();
   const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
@@ -76,8 +78,16 @@ export default function TodayScreen() {
         </View>
       </Reveal>
 
+      {/* Until the app has what it needs, the setup outranks the session:
+          a recommendation built on missing data is not worth pressing. */}
+      {setup.length > 0 ? (
+        <Reveal index={1}>
+          <SetupList steps={setup} onPress={(step) => router.push(step.route)} style={styles.setup} />
+        </Reveal>
+      ) : null}
+
       {/* The whole point of the screen. */}
-      <Reveal index={1}>
+      <Reveal index={setup.length > 0 ? 2 : 1}>
         <View style={styles.hero}>
           <View style={styles.heroHead}>
             <StatusPill
@@ -230,6 +240,9 @@ export default function TodayScreen() {
 
 const styles = StyleSheet.create({
   header: {
+    marginBottom: spacing.xl,
+  },
+  setup: {
     marginBottom: spacing.xl,
   },
   hero: {

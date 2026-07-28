@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { runEngine, type EngineResult } from '@/domain/engine';
 import type { WorkoutSession } from '@/domain/types';
 import { today as todayOf } from '@/utils/date';
+import { deriveSetupSteps, deriveTodayStep, setupProgress } from '@/domain/nextStep';
 import { useAppStore } from './useAppStore';
 
 /**
@@ -118,4 +119,59 @@ export function useBodyWeightSeries() {
     () => [...measurements].sort((a, b) => (a.date < b.date ? -1 : 1)),
     [measurements],
   );
+}
+
+/**
+ * What the app wants the user to do next, and what is still to be set up.
+ *
+ * Assembled once here rather than in each screen, so Today and Plan cannot
+ * disagree about what the outstanding thing is.
+ */
+export function useNextStep() {
+  const profile = useAppStore((state) => state.profile);
+  const goal = useAppStore((state) => state.goal);
+  const gyms = useAppStore((state) => state.gyms);
+  const routines = useAppStore((state) => state.routines);
+  const measurements = useAppStore((state) => state.bodyMeasurements);
+  const checkins = useAppStore((state) => state.checkins);
+  const sessions = useAppStore((state) => state.sessions);
+  const plannedSessions = useAppStore((state) => state.plannedSessions);
+  const planRoute = useAppStore((state) => state.planRoute);
+  const activeSessionId = useAppStore((state) => state.activeSessionId);
+
+  const date = todayOf();
+
+  return useMemo(() => {
+    const input = {
+      today: date,
+      profile,
+      goal,
+      gyms,
+      routines,
+      measurements,
+      checkins,
+      sessions,
+      plannedSessions,
+      hasRoute: planRoute !== null,
+      activeSessionId,
+    };
+
+    return {
+      setup: deriveSetupSteps(input),
+      today: deriveTodayStep(input),
+      progress: setupProgress(input),
+    };
+  }, [
+    date,
+    profile,
+    goal,
+    gyms,
+    routines,
+    measurements,
+    checkins,
+    sessions,
+    plannedSessions,
+    planRoute,
+    activeSessionId,
+  ]);
 }

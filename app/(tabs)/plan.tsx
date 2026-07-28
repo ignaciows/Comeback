@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { StatusPill } from '@/components/Feedback';
 import { AnimatedNumber } from '@/components/motion/AnimatedNumber';
@@ -10,8 +10,9 @@ import { Reveal } from '@/components/motion/Reveal';
 import { NavGroup, NavRow } from '@/components/NavRow';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
+import { Icon, type IconName } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
-import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
+import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import { strategyProfile } from '@/domain/plan/strategies';
@@ -74,6 +75,7 @@ export default function PlanTab() {
   }, [allSessions, plannedSessions, checkins, measurements]);
   const journal = useMemo(() => summariseJournal(grid), [grid]);
 
+  const hasRoute = useAppStore((state) => state.planRoute !== null);
   const actionLabel = verdictActionLabel(verdict);
 
   const act = () => {
@@ -82,6 +84,44 @@ export default function PlanTab() {
     arm(snapshotOf(engine), verdict.headline);
     applyVerdictAction(verdict.action);
   };
+
+  // Nothing is worth showing above a plan that does not exist yet.
+  if (!hasRoute) {
+    return (
+      <Screen ambient>
+        <Reveal index={0}>
+          <Text variant="title" style={styles.emptyTitle}>
+            Your plan
+          </Text>
+        </Reveal>
+
+        <Reveal index={1}>
+          <View style={styles.choices}>
+            <PlanChoice
+              icon="progress"
+              title="Choose one"
+              detail="Build then cut, lean build, cut first — with the curve drawn."
+              onPress={() => router.push('/routes')}
+              primary
+            />
+            <PlanChoice
+              icon="edit"
+              title="Build your own"
+              detail="Drag the blocks. Everything recalculates as you move them."
+              onPress={() => router.push('/builder')}
+            />
+          </View>
+        </Reveal>
+
+        <Reveal index={2}>
+          <NavGroup style={styles.group}>
+            <NavRow label="Change the outcome" icon="target" onPress={() => router.push('/adjust')} />
+            <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
+          </NavGroup>
+        </Reveal>
+      </Screen>
+    );
+  }
 
   return (
     <Screen ambient>
@@ -237,7 +277,64 @@ export default function PlanTab() {
   );
 }
 
+/** One of the two ways into a plan, as a card rather than a list row. */
+function PlanChoice({
+  icon,
+  title,
+  detail,
+  onPress,
+  primary = false,
+}: {
+  icon: IconName;
+  title: string;
+  detail: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      style={({ pressed }) => [
+        styles.choice,
+        primary ? styles.choicePrimary : null,
+        pressed && { opacity: opacity.pressed },
+      ]}
+    >
+      <Icon name={icon} size={22} color={primary ? colors.accent : colors.textSecondary} />
+      <Text variant="heading" style={styles.choiceTitle}>
+        {title}
+      </Text>
+      <Text variant="bodySmall" tone="secondary">
+        {detail}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
+  emptyTitle: {
+    marginBottom: spacing.xl,
+  },
+  choices: {
+    gap: spacing.md,
+  },
+  choice: {
+    borderRadius: radius.xl,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.xl,
+    gap: spacing.sm,
+  },
+  choicePrimary: {
+    borderColor: colors.accentMuted,
+    backgroundColor: colors.accentSurface,
+  },
+  choiceTitle: {
+    marginTop: spacing.sm,
+  },
   hero: {
     borderRadius: radius.xl,
     borderWidth: borderWidth.hairline,
