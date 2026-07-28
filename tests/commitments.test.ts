@@ -68,6 +68,17 @@ describe('what a plan asks for', () => {
     );
   });
 
+  it('does not fall over on a value that came out of old storage', () => {
+    // Two table lookups on data the device persisted. When an older build
+    // wrote a goal without these fields, this crashed the app on launch.
+    expect(() => requiredSessionsPerWeek(undefined, undefined)).not.toThrow();
+    expect(requiredSessionsPerWeek(undefined, undefined)).toBeGreaterThan(0);
+    expect(requiredSessionsPerWeek('nonsense', 'nonsense')).toBeGreaterThan(0);
+    // A field that is present is still honoured.
+    expect(requiredSessionsPerWeek('build', undefined)).toBe(requiredSessionsPerWeek('build', 'steady'));
+    expect(requiredSessionsPerWeek(undefined, 'max')).toBe(requiredSessionsPerWeek('recomp', 'max'));
+  });
+
   it('measures the frequency it can see', () => {
     const commitments = evaluateCommitments({
       today: TODAY,

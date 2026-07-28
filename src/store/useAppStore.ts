@@ -7,7 +7,7 @@ import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
 import { defaultStrategyFor } from '@/domain/plan/strategies';
 import { SPEEDS, simulatePlan } from '@/domain/plan/simulate';
-import { requiredSessionsPerWeek } from '@/domain/plan/commitments';
+import { asObjective, asSpeed, requiredSessionsPerWeek } from '@/domain/plan/commitments';
 import type { VerdictAction } from '@/domain/plan/verdict';
 import { getRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
@@ -227,7 +227,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -1474,7 +1474,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 3,
+      version: 4,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1484,17 +1484,32 @@ export const useAppStore = create<Store>()(
         const state = persisted as Partial<AppState> | undefined;
         if (!state) return initialState;
 
-        // v3 added muscle focus and the record of applied suggestions.
-        const toV3 = (value: Partial<AppState>): AppState =>
+        /**
+         * v4 repairs the goal rather than adding to it.
+         *
+         * A goal that reached a device without `objective` or `speed` took the
+         * app down on launch, and no earlier migration will run again to fix
+         * it — so this one runs over every stored goal whatever version wrote
+         * it, and normalises the fields the engine indexes tables with.
+         */
+        const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 3,
+            schemaVersion: 4,
             appliedProposals: value.appliedProposals ?? [],
-            goal: value.goal ? { ...value.goal, muscleFocus: value.goal.muscleFocus ?? [] } : value.goal,
+            goal: value.goal
+              ? {
+                  ...value.goal,
+                  muscleFocus: value.goal.muscleFocus ?? [],
+                  objective: asObjective(value.goal.objective),
+                  speed: asSpeed(value.goal.speed),
+                  fatTolerance: value.goal.fatTolerance ?? 'some',
+                  strategy: value.goal.strategy ?? defaultStrategyFor(value.goal.type),
+                }
+              : value.goal,
           }) as AppState;
 
-        if (fromVersion >= 3) return state as AppState;
-        if (fromVersion === 2) return toV3(state);
+        if (fromVersion >= 2) return repair(state);
 
         const strategy =
           state.goal?.strategy ?? (state.goal ? defaultStrategyFor(state.goal.type) : 'maintain');
@@ -1502,7 +1517,7 @@ export const useAppStore = create<Store>()(
         const startWeightKg =
           [...(state.bodyMeasurements ?? [])].sort((a, b) => (a.date < b.date ? -1 : 1))[0]?.weightKg ?? 0;
 
-        return toV3({
+        return repair({
           ...state,
           profile: state.profile
             ? { ...state.profile, age: state.profile.age ?? null, sex: state.profile.sex ?? 'unspecified' }

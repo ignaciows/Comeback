@@ -8,6 +8,7 @@ import type {
   PlanSpeed,
 } from '@/domain/types';
 import { clamp, round } from '@/utils/math';
+import { requiredSessionsPerWeek } from './commitments';
 import { projectPlan, type PlanProjection } from './projection';
 import { monthlyMuscleGainPotential, strategyProfile } from './strategies';
 
@@ -73,15 +74,11 @@ function deriveStrategy(
  * Faster gaining needs the volume to use the surplus, or the extra calories
  * become fat. Faster leaning needs enough stimulus to hold on to muscle, but
  * the deficit is doing most of the work, so it asks for less.
+ *
+ * The table lives in `commitments` and is imported rather than repeated: the
+ * simulator's answer to "how many days does this need" and the plan screen's
+ * answer to "how many days does this need" have to be the same number.
  */
-function requiredDaysPerWeek(objective: PlanObjective, speed: PlanSpeed): number {
-  const table: Record<PlanObjective, Record<PlanSpeed, number>> = {
-    build: { cautious: 3, steady: 4, fast: 5, max: 6 },
-    lean: { cautious: 3, steady: 3, fast: 4, max: 5 },
-    recomp: { cautious: 4, steady: 4, fast: 5, max: 6 },
-  };
-  return table[objective][speed];
-}
 
 export type Macros = {
   kcal: number;
@@ -158,7 +155,7 @@ export type SimulationResult = {
 export function simulatePlan(input: SimulationInput): SimulationResult {
   const strategy = deriveStrategy(input.objective, input.speed, input.fatTolerance);
   const profile = strategyProfile(strategy);
-  const daysPerWeek = input.daysPerWeekOverride ?? requiredDaysPerWeek(input.objective, input.speed);
+  const daysPerWeek = input.daysPerWeekOverride ?? requiredSessionsPerWeek(input.objective, input.speed);
 
   const projection = projectPlan({
     today: input.today,

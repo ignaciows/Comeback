@@ -422,6 +422,74 @@ describe('main flow', () => {
     expect(state.appliedProposals).toContain('rest_seconds');
   });
 
+  it('repairs a stored goal that is missing the fields the engine indexes with', async () => {
+    // The crash reported from a device: a goal with no `objective` and no
+    // `speed` reached `requiredSessionsPerWeek`, which indexed a table twice
+    // and took the app down before the first screen rendered.
+    const broken = {
+      state: {
+        schemaVersion: 3,
+        onboardingCompleted: true,
+        profile: {
+          id: 'p1',
+          name: 'Ignacio',
+          heightCm: 186,
+          experience: 'returning',
+          layoffWeeks: 4,
+          age: null,
+          sex: 'unspecified',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        goal: {
+          id: 'g1',
+          type: 'recomposition',
+          strategy: 'lean_bulk',
+          targetWeightKg: 80,
+          proteinTargetG: null,
+          horizonWeeks: 16,
+          startedAt: '2026-07-01',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+        },
+        training: {
+          minDaysPerWeek: 4,
+          preferredDaysPerWeek: 5,
+          sessionMinutes: 60,
+          preferredWeekdays: [1, 2, 3, 5, 6],
+          location: 'gym',
+          gymId: null,
+        },
+        preferences: { units: 'metric', defaultRestSeconds: 120, weekStartsOn: 1 },
+        limitations: null,
+        gyms: [],
+        routines: [],
+        activeRoutineId: null,
+        plannedSessions: [],
+        sessions: [],
+        activeSessionId: null,
+        checkins: [],
+        bodyMeasurements: [
+          { id: 'b1', date: '2026-07-01', weightKg: 77.25, bodyFatPercent: null, source: 'manual', createdAt: '' },
+        ],
+        comebackBaseline: null,
+        phases: [],
+        planRoute: null,
+      },
+      version: 3,
+    };
+    memory.set(STORAGE_KEY, JSON.stringify(broken));
+
+    await useAppStore.persist.rehydrate();
+    const state = useAppStore.getState();
+
+    expect(state.goal?.objective).toBe('recomp');
+    expect(state.goal?.speed).toBe('steady');
+    expect(state.goal?.fatTolerance).toBe('some');
+    expect(() => selectEngine(state)).not.toThrow();
+    expect(selectEngine(state).weeklyTarget).toBeGreaterThan(0);
+  });
+
   it('moves the plan down to a pace the user can actually meet', () => {
     useAppStore.getState().seedDeveloperProfile();
     useAppStore.getState().applyPlanIntent({

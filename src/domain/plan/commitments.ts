@@ -35,14 +35,34 @@ export type Commitment = {
   note: string;
 };
 
+const SESSIONS_TABLE: Record<PlanObjective, Record<PlanSpeed, number>> = {
+  build: { cautious: 3, steady: 4, fast: 5, max: 6 },
+  lean: { cautious: 3, steady: 3, fast: 4, max: 5 },
+  recomp: { cautious: 4, steady: 4, fast: 5, max: 6 },
+};
+
+/**
+ * Reading a plan value that came out of storage.
+ *
+ * Data written by an older build can be missing fields the current one indexes
+ * tables with, and an unguarded double lookup takes the whole app down on
+ * launch — which is exactly how this app has broken before. Every table keyed
+ * by something the user's device persisted goes through a resolver like this
+ * one, the same way `strategyProfile` does.
+ */
+export function asObjective(value: unknown): PlanObjective {
+  return value === 'build' || value === 'lean' || value === 'recomp' ? value : 'recomp';
+}
+
+export function asSpeed(value: unknown): PlanSpeed {
+  return value === 'cautious' || value === 'steady' || value === 'fast' || value === 'max'
+    ? value
+    : 'steady';
+}
+
 /** Sessions a week each pace needs. Below this the pace is a different pace. */
-export function requiredSessionsPerWeek(objective: PlanObjective, speed: PlanSpeed): number {
-  const table: Record<PlanObjective, Record<PlanSpeed, number>> = {
-    build: { cautious: 3, steady: 4, fast: 5, max: 6 },
-    lean: { cautious: 3, steady: 3, fast: 4, max: 5 },
-    recomp: { cautious: 4, steady: 4, fast: 5, max: 6 },
-  };
-  return table[objective][speed];
+export function requiredSessionsPerWeek(objective: unknown, speed: unknown): number {
+  return SESSIONS_TABLE[asObjective(objective)][asSpeed(speed)];
 }
 
 export type CommitmentInput = {
