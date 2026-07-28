@@ -343,3 +343,32 @@ export function currentBlock(route: PlanRoute, weeksElapsed: number): { index: n
 export function getRoute(id: string): PlanRoute | undefined {
   return ROUTES.find((route) => route.id === id);
 }
+
+/** What the user is following, whether it is a named route or their own. */
+export type FollowedRoute = {
+  routeId: string;
+  /** Present only for a plan the user built; a named route is looked up. */
+  blocks?: PlanBlock[];
+  name?: string;
+};
+
+/**
+ * Resolves what the store persisted into a route the simulator can walk.
+ *
+ * A hand-built plan carries its blocks with it rather than an id pointing at a
+ * catalogue entry that does not exist — otherwise editing the built-in routes
+ * later would silently rewrite a plan someone made themselves.
+ */
+export function resolveRoute(followed: FollowedRoute | null): PlanRoute | undefined {
+  if (!followed) return undefined;
+  if (followed.blocks && followed.blocks.length > 0) {
+    return {
+      id: followed.routeId,
+      name: followed.name ?? 'Your plan',
+      summary: 'Built by you.',
+      bestFor: 'Whatever you decided it is for.',
+      blocks: followed.blocks,
+    };
+  }
+  return getRoute(followed.routeId);
+}

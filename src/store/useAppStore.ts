@@ -5,11 +5,12 @@ import { buildInitialRoutine, type PlanRequest } from '@/data/routineTemplates';
 import { getExercise } from '@/data/exercises';
 import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
-import { defaultStrategyFor } from '@/domain/plan/strategies';
+import { defaultStrategyFor, strategyProfile } from '@/domain/plan/strategies';
 import { SPEEDS, simulatePlan } from '@/domain/plan/simulate';
 import { asObjective, asSpeed, requiredSessionsPerWeek } from '@/domain/plan/commitments';
+import type { CustomBlock } from '@/domain/plan/customPlan';
 import type { VerdictAction } from '@/domain/plan/verdict';
-import { getRoute, type PlanRoute } from '@/domain/plan/routes';
+import { getRoute, type FollowedRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
 import { adaptSetCount } from '@/domain/training/adaptation';
@@ -129,8 +130,8 @@ export type AppState = {
   comebackBaseline: ComebackBaseline | null;
   /** Strategy history; never rewritten, only appended to. */
   phases: PlanPhase[];
-  /** The multi-block route being followed, if any. */
-  planRoute: { routeId: string; startedAt: ISODate } | null;
+  /** The multi-block route being followed — named, or built by the user. */
+  planRoute: (FollowedRoute & { startedAt: ISODate }) | null;
   /** Suggestion ids already applied or dismissed, so they stop coming back. */
   appliedProposals: string[];
 };
@@ -199,6 +200,8 @@ type Actions = {
   changeStrategy: (strategy: NutritionStrategy, options?: { targetWeightKg?: number | null; note?: string | null }) => void;
   /** Starts a multi-block route, or advances it to its next block. */
   applyRoute: (routeId: string) => void;
+  /** Commits to a plan the user built themselves. */
+  applyCustomPlan: (blocks: CustomBlock[]) => void;
   advanceRouteBlock: (strategy: NutritionStrategy) => void;
   applyPlanIntent: (intent: {
     objective: PlanObjective;
@@ -1168,6 +1171,40 @@ export const useAppStore = create<Store>()(
           preferredWeekdays:
             WEEKDAYS_FOR[DAYS_FOR_STRATEGY[first.strategy]] ?? state.training.preferredWeekdays,
         });
+      },
+
+      /**
+       * Same as adopting a named route, except the blocks travel with the
+       * plan instead of pointing at a catalogue entry — so editing the
+       * built-in routes later cannot silently rewrite what someone built.
+       */
+      applyCustomPlan: (blocks) => {
+        const state = get();
+        if (blocks.length === 0 || !state.goal) return;
+
+        const date = todayOf();
+        const first = blocks[0];
+
+        set({
+          planRoute: {
+            routeId: 'custom',
+            startedAt: date,
+            name: 'Your plan',
+            blocks: blocks.map((block) => ({
+              strategy: block.strategy,
+              weeks: block.weeks,
+              label: strategyProfile(block.strategy).label,
+            })),
+          },
+        });
+
+        get().changeStrategy(first.strategy, { note: 'Your plan' });
+        get().updateTraining({
+          preferredDaysPerWeek: DAYS_FOR_STRATEGY[first.strategy],
+          preferredWeekdays:
+            WEEKDAYS_FOR[DAYS_FOR_STRATEGY[first.strategy]] ?? state.training.preferredWeekdays,
+        });
+        track({ name: 'plan_reconfigured', reason: 'custom' });
       },
 
       /** Moves to the next block of the running route, once its time is up. */

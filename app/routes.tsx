@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { EmptyState, Note, StatusPill } from '@/components/Feedback';
 import { Header } from '@/components/Header';
+import { MetricRow } from '@/components/Metric';
 import { Reveal } from '@/components/motion/Reveal';
 import { Screen } from '@/components/Screen';
 import { Label, Text } from '@/design-system/Text';
@@ -153,6 +154,14 @@ export default function RoutesScreen() {
         })}
       </View>
 
+      <MetricRow
+        label="None of these? Build your own"
+        detail="Drag the blocks and watch it recalculate"
+        onPress={() => router.push('/builder')}
+        chevron
+        style={styles.build}
+      />
+
       <Note style={styles.note}>
         Curves are model estimates from population averages, simulated week by week with muscle gain capped by what
         training can actually build. They move as your own data comes in.
@@ -217,6 +226,9 @@ const styles = StyleSheet.create({
   },
   cardFoot: {
     marginTop: spacing.md,
+  },
+  build: {
+    marginTop: spacing.xl,
   },
   note: {
     marginTop: spacing.xl,

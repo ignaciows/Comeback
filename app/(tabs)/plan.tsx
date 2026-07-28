@@ -13,7 +13,9 @@ import { Section } from '@/components/Section';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
+import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import { strategyProfile } from '@/domain/plan/strategies';
+import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
 import { PlanVerdictCard, verdictActionLabel } from '@/features/plan/PlanVerdictCard';
 import { RequirementList } from '@/features/plan/RequirementList';
@@ -38,6 +40,10 @@ export default function PlanTab() {
   const goal = useAppStore((state) => state.goal);
   const routine = useActiveRoutine();
   const applyVerdictAction = useAppStore((state) => state.applyVerdictAction);
+  const allSessions = useAppStore((state) => state.sessions);
+  const plannedSessions = useAppStore((state) => state.plannedSessions);
+  const checkins = useAppStore((state) => state.checkins);
+  const measurements = useAppStore((state) => state.bodyMeasurements);
   const arm = useRecalcStore((state) => state.arm);
 
   const { projection, volume, routeProgress, drift, verdict, commitments, ramp, weeklyTarget } = engine;
@@ -53,6 +59,19 @@ export default function PlanTab() {
     }
     return pathWeeksFrom(ramp, byWeek, weekStart);
   }, [sessions, ramp, weekStart]);
+
+  const grid = useMemo(() => {
+    const past = buildJournal({
+      today: todayOf(),
+      days: 56,
+      sessions: allSessions,
+      plannedSessions,
+      checkins,
+      measurements,
+    });
+    return [...past, ...futureDays(todayOf(), 14, plannedSessions)];
+  }, [allSessions, plannedSessions, checkins, measurements]);
+  const journal = useMemo(() => summariseJournal(grid), [grid]);
 
   const actionLabel = verdictActionLabel(verdict);
 
@@ -119,12 +138,26 @@ export default function PlanTab() {
       </Reveal>
 
       <Reveal index={4}>
+        <Section
+          title="Days"
+          action={{ label: 'Journal', onPress: () => router.push('/journal') }}
+          footnote={
+            journal.trained > 0
+              ? `${journal.trained} trained · best run ${journal.streak} days`
+              : 'Every day you train fills a square.'
+          }
+        >
+          <DayGrid days={grid} onPressDay={() => router.push('/journal')} />
+        </Section>
+      </Reveal>
+
+      <Reveal index={5}>
         <Section title="What this plan needs">
           <RequirementList commitments={commitments} />
         </Section>
       </Reveal>
 
-      <Reveal index={5}>
+      <Reveal index={6}>
         <Section
           title="Where the work goes"
           action={{ label: focus.length > 0 ? 'Change' : 'Choose', onPress: () => router.push('/focus') }}
@@ -138,7 +171,7 @@ export default function PlanTab() {
         </Section>
       </Reveal>
 
-      <Reveal index={6}>
+      <Reveal index={7}>
         <NavGroup style={styles.group}>
           {routeProgress?.nextBlock ? (
             <NavRow
@@ -159,6 +192,7 @@ export default function PlanTab() {
             />
           ) : null}
           <NavRow label="Change the plan" detail="Outcome, speed, calories" onPress={() => router.push('/adjust')} />
+          <NavRow label="Build your own" detail="Drag the blocks, watch it recalculate" onPress={() => router.push('/builder')} />
           <NavRow
             label="Named plans"
             detail={routeProgress?.routeName ?? 'Bulk then cut, lean, recomp'}
@@ -183,6 +217,7 @@ export default function PlanTab() {
             dot={engine.proposals.length > 0}
             onPress={() => router.push('/knows')}
           />
+          <NavRow label="Journal" detail="Every day, as a square" onPress={() => router.push('/journal')} />
           <NavRow label="Progress" detail="Momentum, body, lifts" onPress={() => router.push('/progress')} />
         </NavGroup>
       </Reveal>

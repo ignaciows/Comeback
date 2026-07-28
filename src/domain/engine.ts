@@ -25,7 +25,7 @@ import { evaluateCommitments, requiredSessionsPerWeek, type Commitment } from '.
 import { observedWeeklyRate } from './plan/observedRate';
 import { buildRamp, currentRampTarget, observedSessionsPerWeek, type Ramp } from './plan/ramp';
 import { judgePlan, type PlanVerdict } from './plan/verdict';
-import { currentBlock, getRoute } from './plan/routes';
+import { currentBlock, resolveRoute, type FollowedRoute } from './plan/routes';
 import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
 import type {
@@ -59,7 +59,8 @@ export type EngineInput = {
   activeRoutineId: string | null;
   goal: Goal | null;
   profile: Profile | null;
-  planRoute: { routeId: string; startedAt: ISODate } | null;
+  /** A named route, or one the user built (which carries its own blocks). */
+  planRoute: (FollowedRoute & { startedAt: ISODate }) | null;
   bodyMeasurements: BodyMeasurement[];
   baseline: ComebackBaseline | null;
   weekStartsOn: 0 | 1;
@@ -555,7 +556,7 @@ export function runEngine(input: EngineInput): EngineResult {
  */
 function buildRouteProgress(input: EngineInput): EngineResult['routeProgress'] {
   if (!input.planRoute) return null;
-  const route = getRoute(input.planRoute.routeId);
+  const route = resolveRoute(input.planRoute);
   if (!route) return null;
 
   const weeksElapsed = Math.floor(daysBetween(input.planRoute.startedAt, input.today) / 7);

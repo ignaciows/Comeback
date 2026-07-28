@@ -527,6 +527,28 @@ describe('main flow', () => {
     expect(useAppStore.getState().goal?.speed).toBe('fast');
   });
 
+  it('follows a plan the user built, carrying its blocks with it', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().applyCustomPlan([
+      { id: 'a', strategy: 'bulk', weeks: 10 },
+      { id: 'b', strategy: 'lean_cut', weeks: 6 },
+    ]);
+
+    const state = useAppStore.getState();
+    // The blocks travel with the plan rather than pointing at a catalogue
+    // entry, so editing the built-in routes cannot rewrite someone's own plan.
+    expect(state.planRoute?.routeId).toBe('custom');
+    expect(state.planRoute?.blocks).toHaveLength(2);
+    expect(state.planRoute?.blocks?.[0].weeks).toBe(10);
+    // The first block becomes the running strategy.
+    expect(state.goal?.strategy).toBe('bulk');
+
+    // And the engine resolves it like any named route.
+    const engine = selectEngine(state);
+    expect(engine.routeProgress?.routeName).toBe('Your plan');
+    expect(engine.routeProgress?.blockLabel).toBeTruthy();
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();
