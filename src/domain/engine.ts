@@ -25,7 +25,8 @@ import { evaluateCommitments, requiredSessionsPerWeek, type Commitment } from '.
 import { observedWeeklyRate } from './plan/observedRate';
 import { buildRamp, currentRampTarget, observedSessionsPerWeek, type Ramp } from './plan/ramp';
 import { judgePlan, type PlanVerdict } from './plan/verdict';
-import { currentBlock, resolveRoute, type FollowedRoute } from './plan/routes';
+import { buildPhases, type PlanPhaseView } from './plan/phases';
+import { currentBlock, resolveRoute, simulateRoute, type FollowedRoute } from './plan/routes';
 import { projectPlan, type PlanProjection, type ProjectionInput } from './plan/projection';
 import { estimateTargetDateImpact, type TrajectoryResult } from './trajectory/estimateTargetDate';
 import type {
@@ -129,6 +130,8 @@ export type EngineResult = {
   weeklyTarget: number;
   /** Whether the plan being followed is the plan that was chosen. */
   verdict: PlanVerdict;
+  /** The road ahead, cut into named stretches with what each one does to you. */
+  phases: PlanPhaseView[];
 };
 
 function completedSessions(sessions: WorkoutSession[]): WorkoutSession[] {
@@ -507,6 +510,52 @@ export function runEngine(input: EngineInput): EngineResult {
     requiredProteinG: projection?.proteinTargetG[0] ?? 0,
   });
 
+  /**
+   * The route walked week by week, when one is being followed. Needed for the
+   * phases; `routeProgress` only says which block you are in.
+   */
+  const routeSimulation =
+    input.planRoute && input.profile && latestWeight
+      ? (() => {
+          const route = resolveRoute(input.planRoute);
+          return route
+            ? simulateRoute(
+                {
+                  today: input.today,
+                  currentWeightKg: latestWeight.weightKg,
+                  heightCm: input.profile.heightCm,
+                  age: input.profile.age ?? 30,
+                  sex: input.profile.sex,
+                  experience: input.profile.experience,
+                  bodyFatPercent: latestWeight.bodyFatPercent,
+                  sessionsPerWeek: weeklyTarget,
+                },
+                route,
+              )
+            : null;
+        })()
+      : null;
+
+  const phases = buildPhases({
+    today: input.today,
+    sessions: input.sessions,
+    simulation: routeSimulation,
+    fallback:
+      projection && projection.targetDate && input.goal
+        ? {
+            startsOn: input.today,
+            endsOn: projection.targetDate,
+            strategy: input.goal.strategy,
+            totalWeightChangeKg: projection.targetWeightKg
+              ? projection.targetWeightKg - latestWeight!.weightKg
+              : 0,
+            leanChangeKg: projection.leanChangeKg ?? 0,
+            fatChangeKg: projection.fatChangeKg ?? 0,
+            kcal: projection.targetKcal,
+          }
+        : null,
+  });
+
   const verdict = judgePlan({
     today: input.today,
     sessions: input.sessions,
@@ -546,6 +595,7 @@ export function runEngine(input: EngineInput): EngineResult {
     ramp,
     weeklyTarget,
     verdict,
+    phases,
   };
 }
 

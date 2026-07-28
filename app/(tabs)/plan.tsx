@@ -17,6 +17,7 @@ import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
+import { PhaseTrack } from '@/features/plan/PhaseTrack';
 import { PlanVerdictCard, verdictActionLabel } from '@/features/plan/PlanVerdictCard';
 import { RequirementList } from '@/features/plan/RequirementList';
 import { VolumeBars } from '@/features/plan/VolumeBars';
@@ -46,7 +47,7 @@ export default function PlanTab() {
   const measurements = useAppStore((state) => state.bodyMeasurements);
   const arm = useRecalcStore((state) => state.arm);
 
-  const { projection, volume, routeProgress, drift, verdict, commitments, ramp, weeklyTarget } = engine;
+  const { projection, volume, routeProgress, drift, verdict, commitments, ramp, weeklyTarget, phases } = engine;
   const strategy = goal ? strategyProfile(goal.strategy) : null;
   const focus = goal?.muscleFocus ?? [];
   const weekStart = startOfWeek(todayOf());
@@ -93,14 +94,13 @@ export default function PlanTab() {
             </Text>
           </View>
 
+          <Label style={styles.heroLabel}>Days to your target</Label>
+
           <View style={styles.heroValue}>
             <AnimatedNumber value={projection?.daysRemaining ?? null} variant="display" style={styles.heroNumber} />
-            <Text variant="title" tone="tertiary">
-              {projection?.daysRemaining === null || projection?.daysRemaining === undefined ? '' : 'days'}
-            </Text>
           </View>
 
-          <Text variant="bodySmall" tone="secondary">
+          <Text variant="body" tone="secondary">
             {projection?.targetDate
               ? formatLongDate(projection.targetDate)
               : 'Set a target and this counts down to it.'}
@@ -124,9 +124,17 @@ export default function PlanTab() {
         />
       </Reveal>
 
+      {phases.length > 0 ? (
+        <Reveal index={3}>
+          <Section title="The road" footnote={`${phases.length} phases · tap one to see what it does`}>
+            <PhaseTrack phases={phases} />
+          </Section>
+        </Reveal>
+      ) : null}
+
       <Reveal index={3}>
         <Section
-          title="The road"
+          title="The next weeks"
           footnote={
             ramp.weeksToTarget > 0
               ? `Building to ${ramp.targetDays} a week over ${ramp.weeksToTarget} weeks, from the ${ramp.startDays} you do now.`
@@ -238,15 +246,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  heroLabel: {
+    marginTop: spacing.lg,
+  },
   heroValue: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.xs,
   },
   heroNumber: {
-    fontSize: 56,
-    lineHeight: 60,
+    // The one number the whole app is counting down. It earns the size.
+    fontSize: 84,
+    lineHeight: 88,
   },
   recalc: {
     marginTop: spacing.lg,

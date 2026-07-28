@@ -144,6 +144,7 @@ describe('the journal', () => {
     intent: 'full',
     status: 'completed',
     notes: null,
+    pauses: [],
     exercises: [],
   });
 

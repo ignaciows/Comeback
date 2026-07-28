@@ -41,12 +41,14 @@ function session(
     intent: 'full',
     status: 'completed',
     notes: null,
+    pauses: [],
     exercises: exercises.map((entry, index) => ({
       id: `we-${index}`,
       exerciseId: entry.id,
       order: index,
       substitutedFrom: entry.substitutedFrom ?? null,
       note: null,
+      skipped: false,
       sets: Array.from({ length: entry.sets }, (_, setIndex) => {
         const completed = setIndex < (entry.completed ?? entry.sets);
         cursor += restSeconds * 1000;

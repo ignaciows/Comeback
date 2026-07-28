@@ -6,6 +6,7 @@ import { Text } from '@/design-system/Text';
 import { colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { EQUIPMENT_LABELS, MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import type { Exercise } from '@/domain/types';
+import { EquipmentIllustration } from './EquipmentIllustration';
 import { MuscleMap, preferredView } from './MuscleMap';
 
 /**
@@ -64,6 +65,8 @@ export function ExerciseRow({
         />
       </View>
 
+      <EquipmentIllustration equipment={exercise.equipment} size={26} showLabels={false} style={styles.kit} />
+
       <View style={styles.body}>
         <Text variant="body" numberOfLines={1}>
           {exercise.name}
@@ -106,6 +109,9 @@ const styles = StyleSheet.create({
   figure: {
     width: 36,
     alignItems: 'center',
+  },
+  kit: {
+    gap: spacing.xs,
   },
   body: {
     flex: 1,

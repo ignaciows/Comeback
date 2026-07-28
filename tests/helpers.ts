@@ -62,6 +62,7 @@ export function workout(
     intent: 'full',
     status: 'completed',
     notes: null,
+    pauses: [],
     exercises: [
       {
         id: `exercise-${date}`,
@@ -69,6 +70,7 @@ export function workout(
         order: 0,
         substitutedFrom: null,
         note: null,
+        skipped: false,
         sets: sets.map((set, index) => ({
           id: `set-${date}-${index}`,
           order: index,

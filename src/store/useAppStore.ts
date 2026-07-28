@@ -190,6 +190,13 @@ type Actions = {
   updateSet: (sessionId: string, workoutExerciseId: string, setId: string, patch: Partial<WorkoutSet>) => void;
   removeSet: (sessionId: string, workoutExerciseId: string, setId: string) => void;
   setSessionNotes: (sessionId: string, notes: string) => void;
+  /** Stops the clock. Paused time is excluded from the session's length. */
+  pauseSession: (sessionId: string) => void;
+  resumeSession: (sessionId: string) => void;
+  /** Clears every logged set but keeps the session and its exercises. */
+  restartSession: (sessionId: string) => void;
+  /** Leaves an exercise out of today without deleting it. */
+  toggleExerciseSkipped: (sessionId: string, workoutExerciseId: string) => void;
   finishSession: (sessionId: string) => void;
   discardSession: (sessionId: string) => void;
   deleteSession: (sessionId: string) => void;
@@ -230,7 +237,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -769,6 +776,7 @@ export const useAppStore = create<Store>()(
             order: index,
             substitutedFrom: null,
             note: null,
+            skipped: false,
             sets: Array.from({ length: setCount }, (_, setIndex) =>
               makeSet(setIndex, {
                 weightKg: previous?.weightKg ?? null,
@@ -793,6 +801,7 @@ export const useAppStore = create<Store>()(
           intent,
           status: 'active',
           notes: null,
+          pauses: [],
           exercises,
         };
 
@@ -810,6 +819,7 @@ export const useAppStore = create<Store>()(
               id: createId(),
               exerciseId,
               order: session.exercises.length,
+              skipped: false,
               substitutedFrom: null,
               note: null,
               sets: Array.from({ length: 3 }, (_, index) =>
@@ -936,6 +946,72 @@ export const useAppStore = create<Store>()(
           ),
         })),
 
+      pauseSession: (sessionId) =>
+        set((state) => ({
+          sessions: state.sessions.map((session) => {
+            if (session.id !== sessionId) return session;
+            // Pausing twice is the same as pausing once.
+            if (session.pauses.some((pause) => pause.endedAt === null)) return session;
+            return {
+              ...session,
+              pauses: [...session.pauses, { id: createId(), startedAt: nowISO(), endedAt: null }],
+            };
+          }),
+        })),
+
+      resumeSession: (sessionId) =>
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  pauses: session.pauses.map((pause) =>
+                    pause.endedAt === null ? { ...pause, endedAt: nowISO() } : pause,
+                  ),
+                }
+              : session,
+          ),
+        })),
+
+      /**
+       * Start the session again from zero without losing what was laid out.
+       * The clock restarts too — otherwise the first attempt's false start
+       * would be counted as training time.
+       */
+      restartSession: (sessionId) =>
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  startedAt: nowISO(),
+                  pauses: [],
+                  exercises: session.exercises.map((exercise) => ({
+                    ...exercise,
+                    skipped: false,
+                    sets: exercise.sets.map((set) => ({ ...set, completed: false, completedAt: null })),
+                  })),
+                }
+              : session,
+          ),
+        })),
+
+      toggleExerciseSkipped: (sessionId, workoutExerciseId) =>
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === sessionId
+              ? {
+                  ...session,
+                  exercises: session.exercises.map((exercise) =>
+                    exercise.id === workoutExerciseId
+                      ? { ...exercise, skipped: !exercise.skipped }
+                      : exercise,
+                  ),
+                }
+              : session,
+          ),
+        })),
+
       finishSession: (sessionId) => {
         const state = get();
         const session = state.sessions.find((entry) => entry.id === sessionId);
@@ -950,7 +1026,17 @@ export const useAppStore = create<Store>()(
         set((current) => ({
           sessions: current.sessions.map((entry) =>
             entry.id === sessionId
-              ? { ...entry, endedAt, status: 'completed' as const, exercises: reindex(exercises) }
+              ? {
+                  ...entry,
+                  endedAt,
+                  status: 'completed' as const,
+                  // A session finished while paused closes the pause at the
+                  // same moment, so paused time never runs past the session.
+                  pauses: entry.pauses.map((pause) =>
+                    pause.endedAt === null ? { ...pause, endedAt } : pause,
+                  ),
+                  exercises: reindex(exercises),
+                }
               : entry,
           ),
           activeSessionId: null,
@@ -1479,12 +1565,14 @@ export const useAppStore = create<Store>()(
             intent: 'full',
             status: 'completed',
             notes: null,
+            pauses: [],
             exercises: routineDay.exercises.slice(0, 4).map((exercise, index) => ({
               id: createId(),
               exerciseId: exercise.exerciseId,
               order: index,
               substitutedFrom: null,
               note: null,
+              skipped: false,
               sets: Array.from({ length: exercise.sets }, (_, setIndex) => ({
                 id: createId(),
                 order: setIndex,
@@ -1511,7 +1599,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 4,
+      version: 5,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1532,7 +1620,7 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 4,
+            schemaVersion: 5,
             appliedProposals: value.appliedProposals ?? [],
             goal: value.goal
               ? {
@@ -1544,6 +1632,15 @@ export const useAppStore = create<Store>()(
                   strategy: value.goal.strategy ?? defaultStrategyFor(value.goal.type),
                 }
               : value.goal,
+            sessions: (value.sessions ?? []).map((session) => ({
+              ...session,
+              // v5 added deliberate pauses and per-exercise skipping.
+              pauses: session.pauses ?? [],
+              exercises: (session.exercises ?? []).map((exercise) => ({
+                ...exercise,
+                skipped: exercise.skipped ?? false,
+              })),
+            })),
           }) as AppState;
 
         if (fromVersion >= 2) return repair(state);

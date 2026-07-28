@@ -20,7 +20,9 @@ import { FormGuideSheet } from '@/features/training/FormGuide';
 import { formatPreviousSet, previousPerformance } from '@/features/training/history';
 import { ExerciseRow } from '@/features/training/ExerciseRow';
 import { RestTimer } from '@/features/training/RestTimer';
+import { SessionBar } from '@/features/training/SessionBar';
 import { SetRow } from '@/features/training/SetRow';
+import { sessionProgress } from '@/domain/training/sessionProgress';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 import { formatDuration, formatShortDate } from '@/utils/date';
@@ -46,6 +48,10 @@ export default function SessionScreen() {
   const substituteExercise = useAppStore((state) => state.substituteExercise);
   const setSessionNotes = useAppStore((state) => state.setSessionNotes);
   const finishSession = useAppStore((state) => state.finishSession);
+  const pauseSession = useAppStore((state) => state.pauseSession);
+  const resumeSession = useAppStore((state) => state.resumeSession);
+  const restartSession = useAppStore((state) => state.restartSession);
+  const toggleExerciseSkipped = useAppStore((state) => state.toggleExerciseSkipped);
   const discardSession = useAppStore((state) => state.discardSession);
 
   // The screen stays on while a session is open — phones get put down mid-set.
@@ -60,6 +66,7 @@ export default function SessionScreen() {
   const [query, setQuery] = useState('');
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   useEffect(() => {
     if (!session || session.status !== 'active') return;
@@ -69,6 +76,14 @@ export default function SessionScreen() {
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [session]);
+
+  // Recomputed every second with the clock, so the pause timer runs live.
+  const progress = useMemo(
+    () => (session ? sessionProgress(session) : null),
+    // `elapsed` is the tick; the session itself changes far less often.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, elapsed],
+  );
 
   const equipmentAvailability = useMemo(
     () => gyms.find((gym) => gym.id === gymId)?.equipment ?? {},
@@ -145,6 +160,21 @@ export default function SessionScreen() {
         }
       />
 
+      {!readOnly && progress ? (
+        <SessionBar
+          progress={progress}
+          usualRestSeconds={defaultRestSeconds}
+          onPause={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            pauseSession(session.id);
+          }}
+          onResume={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            resumeSession(session.id);
+          }}
+        />
+      ) : null}
+
       {!readOnly ? (
         <RestTimer
           startedAt={restStartedAt}
@@ -166,7 +196,7 @@ export default function SessionScreen() {
         const previous = previousPerformance(sessions, exercise.exerciseId, session.id);
         const meta = getExercise(exercise.exerciseId);
         return (
-          <Section key={exercise.id}>
+          <Section key={exercise.id} style={exercise.skipped ? styles.skipped : undefined}>
             <View style={styles.exerciseHead}>
               <Pressable
                 onPress={() => setGuiding(exercise.exerciseId)}
@@ -191,6 +221,15 @@ export default function SessionScreen() {
               </Pressable>
               {!readOnly ? (
                 <View style={styles.exerciseActions}>
+                  <IconButton
+                    icon={exercise.skipped ? 'plus' : 'minus'}
+                    label={exercise.skipped ? 'Put it back' : 'Not doing this one'}
+                    size={16}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      toggleExerciseSkipped(session.id, exercise.id);
+                    }}
+                  />
                   <IconButton
                     icon="arrowUp"
                     label="Move up"
@@ -301,6 +340,7 @@ export default function SessionScreen() {
             {completedSets === 0 ? (
               <Note>Complete at least one set before finishing, or discard the session.</Note>
             ) : null}
+            <TextButton label="Start this session over" onPress={() => setConfirmRestart(true)} style={styles.discard} />
             <TextButton label="Discard session" onPress={() => setConfirmDiscard(true)} style={styles.discard} />
           </ActionBar>
         </>
@@ -381,6 +421,19 @@ export default function SessionScreen() {
       />
 
       <ConfirmationSheet
+        visible={confirmRestart}
+        onClose={() => setConfirmRestart(false)}
+        title="Start over"
+        message="Every set is unticked and the clock restarts. The exercises stay as they are, so nothing has to be set up again."
+        confirmLabel="Start over"
+        onConfirm={() => {
+          restartSession(session.id);
+          setConfirmRestart(false);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }}
+      />
+
+      <ConfirmationSheet
         visible={confirmDiscard}
         onClose={() => setConfirmDiscard(false)}
         title="Discard session"
@@ -444,6 +497,9 @@ const styles = StyleSheet.create({
   },
   meta: {
     marginTop: spacing.sm,
+  },
+  skipped: {
+    opacity: opacity.disabled,
   },
   discard: {
     alignSelf: 'center',

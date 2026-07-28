@@ -243,11 +243,28 @@ export interface WorkoutExercise {
   /** Canonical id of the exercise this replaced, if any. */
   substitutedFrom: string | null;
   note: string | null;
+  /** Set when the user chose to leave this one out today. */
+  skipped: boolean;
   sets: WorkoutSet[];
 }
 
 export type SessionIntent = 'full' | 'reduced' | 'recovery' | 'free';
 export type SessionStatus = 'active' | 'completed' | 'discarded';
+
+/**
+ * A stretch where the session was deliberately stopped.
+ *
+ * Distinct from the gap between two sets: this is the user saying "I am not
+ * training right now". Recording it separately is what lets the app report how
+ * long a session really took without counting the queue for the squat rack as
+ * training time.
+ */
+export interface SessionPause {
+  id: UUID;
+  startedAt: ISODateTime;
+  /** Null while the pause is still running. */
+  endedAt: ISODateTime | null;
+}
 
 export interface WorkoutSession {
   id: UUID;
@@ -261,6 +278,8 @@ export interface WorkoutSession {
   intent: SessionIntent;
   status: SessionStatus;
   notes: string | null;
+  /** Deliberate stops, so paused time is not counted as training time. */
+  pauses: SessionPause[];
   exercises: WorkoutExercise[];
 }
 

@@ -13,6 +13,7 @@ import { spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
 import { FormGuideContent } from '@/features/training/FormGuide';
+import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
 import { MuscleMap } from '@/features/training/MuscleMap';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
@@ -76,10 +77,14 @@ export default function ExerciseDetailScreen() {
       ) : null}
 
       {meta ? (
-        <Section title="How to do it">
-          <FormGuideContent exerciseId={id} />
+        <Section title="Find it in the gym" footnote={equipmentHint(meta.equipment) ?? undefined}>
+          <EquipmentIllustration equipment={meta.equipment} size={56} />
         </Section>
       ) : null}
+
+      <Section title="How to do it">
+        <FormGuideContent exerciseId={id} />
+      </Section>
 
       {entries.length === 0 ? (
         <EmptyState

@@ -19,6 +19,7 @@ function session(date: string, options: { logged?: boolean } = {}): WorkoutSessi
     intent: 'full',
     status: 'completed',
     notes: null,
+    pauses: [],
     exercises: [
       {
         id: 'we1',
@@ -26,6 +27,7 @@ function session(date: string, options: { logged?: boolean } = {}): WorkoutSessi
         order: 0,
         substitutedFrom: null,
         note: null,
+        skipped: false,
         sets: [
           {
             id: 'set1',

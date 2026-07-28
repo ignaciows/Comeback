@@ -24,6 +24,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 (globalThis as { __DEV__?: boolean }).__DEV__ = false;
 
 const { useAppStore, selectEngine } = await import('@/store/useAppStore');
+const { sessionProgress } = await import('@/domain/training/sessionProgress');
 const { STORAGE_KEY } = await import('@/services/storage/adapter');
 const { today } = await import('@/utils/date');
 
@@ -525,6 +526,112 @@ describe('main flow', () => {
 
     useAppStore.getState().applyVerdictAction({ kind: 'accelerate', toSpeed: 'fast' });
     expect(useAppStore.getState().goal?.speed).toBe('fast');
+  });
+
+  it('backfills pauses and skips onto sessions written before they existed', async () => {
+    const older = {
+      state: {
+        schemaVersion: 4,
+        onboardingCompleted: true,
+        profile: {
+          id: 'p1',
+          name: 'Ignacio',
+          heightCm: 186,
+          experience: 'returning',
+          layoffWeeks: 4,
+          age: null,
+          sex: 'unspecified',
+          createdAt: '',
+          updatedAt: '',
+        },
+        goal: {
+          id: 'g1',
+          type: 'recomposition',
+          objective: 'recomp',
+          speed: 'steady',
+          fatTolerance: 'some',
+          strategy: 'lean_bulk',
+          muscleFocus: [],
+          targetWeightKg: 80,
+          proteinTargetG: null,
+          horizonWeeks: 16,
+          startedAt: '2026-07-01',
+          createdAt: '',
+          updatedAt: '',
+        },
+        training: {
+          minDaysPerWeek: 4,
+          preferredDaysPerWeek: 5,
+          sessionMinutes: 60,
+          preferredWeekdays: [1, 2, 3, 5, 6],
+          location: 'gym',
+          gymId: null,
+        },
+        preferences: { units: 'metric', defaultRestSeconds: 120, weekStartsOn: 1 },
+        limitations: null,
+        gyms: [],
+        routines: [],
+        activeRoutineId: null,
+        plannedSessions: [],
+        // A session with neither `pauses` nor `skipped` on its exercises.
+        sessions: [
+          {
+            id: 's1',
+            date: '2026-07-02',
+            startedAt: '2026-07-02T18:00:00.000Z',
+            endedAt: '2026-07-02T19:00:00.000Z',
+            name: 'Upper A',
+            routineId: null,
+            routineDayId: null,
+            plannedSessionId: null,
+            intent: 'full',
+            status: 'completed',
+            notes: null,
+            exercises: [
+              {
+                id: 'we1',
+                exerciseId: 'barbell_bench_press',
+                order: 0,
+                substitutedFrom: null,
+                note: null,
+                sets: [
+                  {
+                    id: 'set1',
+                    order: 0,
+                    weightKg: 60,
+                    reps: 8,
+                    rir: 2,
+                    warmup: false,
+                    completed: true,
+                    completedAt: '2026-07-02T18:20:00.000Z',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        activeSessionId: null,
+        checkins: [],
+        bodyMeasurements: [
+          { id: 'b1', date: '2026-07-01', weightKg: 77.25, bodyFatPercent: null, source: 'manual', createdAt: '' },
+        ],
+        comebackBaseline: null,
+        phases: [],
+        planRoute: null,
+        appliedProposals: [],
+      },
+      version: 4,
+    };
+    memory.set(STORAGE_KEY, JSON.stringify(older));
+
+    await useAppStore.persist.rehydrate();
+    const state = useAppStore.getState();
+
+    expect(state.sessions[0].pauses).toEqual([]);
+    expect(state.sessions[0].exercises[0].skipped).toBe(false);
+    // And every reader of a session copes with it.
+    expect(() => selectEngine(state)).not.toThrow();
+    expect(sessionProgress(state.sessions[0]).pausedSeconds).toBe(0);
   });
 
   it('follows a plan the user built, carrying its blocks with it', () => {
