@@ -6,6 +6,8 @@ import { Label, Text } from '@/design-system/Text';
 import { colors, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { guidanceFor } from '@/data/exerciseGuidance';
+import { EquipmentIllustration, equipmentHint } from './EquipmentIllustration';
+import { ExerciseAnimation } from './ExerciseAnimation';
 import { MuscleMap } from './MuscleMap';
 
 /** Numbered or bulleted lines under a small heading. */
@@ -36,13 +38,30 @@ export function FormGuideContent({ exerciseId }: { exerciseId: string }) {
 
   return (
     <View>
-      {/* What it works, before how to do it. */}
+      {/* What it looks like, then what it works, then how to do it. */}
+      <ExerciseAnimation
+        pattern={exercise.pattern}
+        equipment={exercise.equipment}
+        size={190}
+        style={styles.animation}
+      />
+
       <MuscleMap
         primary={exercise.primaryMuscle}
         secondary={exercise.secondaryMuscles}
         height={150}
         style={styles.map}
       />
+
+      <View style={styles.kit}>
+        <EquipmentIllustration equipment={exercise.equipment} size={40} />
+      </View>
+      {equipmentHint(exercise.equipment) ? (
+        <Text variant="caption" tone="tertiary" style={styles.hint}>
+          {equipmentHint(exercise.equipment)}
+        </Text>
+      ) : null}
+
       <Block title="Set up" items={guidance.setup} />
       <Block title="Execution" items={guidance.execution} numbered />
       <Block title="Cues" items={guidance.cues} />
@@ -87,6 +106,17 @@ export function FormGuideSheet({
 }
 
 const styles = StyleSheet.create({
+  animation: {
+    marginBottom: spacing.xl,
+  },
+  kit: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  hint: {
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
   map: {
     marginBottom: spacing.xl,
   },

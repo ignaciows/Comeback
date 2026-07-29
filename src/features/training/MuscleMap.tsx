@@ -1,5 +1,5 @@
 import { StyleSheet, View, type ViewStyle } from 'react-native';
-import Svg, { Circle, Ellipse, Rect } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 
 import { Label, Text } from '@/design-system/Text';
 import { colors, spacing } from '@/design-system/tokens';
@@ -39,8 +39,8 @@ const rect = (x: number, y: number, width: number, height: number, rx: number): 
 const FRONT_PARTS: Part[] = [
   { muscle: null, shape: { kind: 'circle', cx: 50, cy: 15, r: 11 } },
   { muscle: null, shape: rect(44, 25, 12, 9, 3) },
-  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 27, cy: 45, rx: 11, ry: 9 } },
-  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 73, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 28, cy: 46, rx: 10, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 72, cy: 46, rx: 10, ry: 9 } },
   { muscle: 'chest', shape: rect(33, 37, 15, 20, 6) },
   { muscle: 'chest', shape: rect(52, 37, 15, 20, 6) },
   { muscle: 'core', shape: rect(39, 60, 22, 34, 7) },
@@ -57,8 +57,8 @@ const FRONT_PARTS: Part[] = [
 const BACK_PARTS: Part[] = [
   { muscle: null, shape: { kind: 'circle', cx: 50, cy: 15, r: 11 } },
   { muscle: null, shape: rect(44, 25, 12, 9, 3) },
-  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 27, cy: 45, rx: 11, ry: 9 } },
-  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 73, cy: 45, rx: 11, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 28, cy: 46, rx: 10, ry: 9 } },
+  { muscle: 'shoulders', shape: { kind: 'ellipse', cx: 72, cy: 46, rx: 10, ry: 9 } },
   { muscle: 'back', shape: rect(35, 36, 30, 20, 8) },
   { muscle: 'back', shape: rect(31, 54, 16, 26, 6) },
   { muscle: 'back', shape: rect(53, 54, 16, 26, 6) },
@@ -84,6 +84,16 @@ export function preferredView(muscle: MuscleGroup): 'front' | 'back' {
   return FRONT_MUSCLES.includes(muscle) ? 'front' : 'back';
 }
 
+/**
+ * The body itself, drawn once behind the muscles.
+ *
+ * Without it the highlighted muscles float in the dark with nothing to belong
+ * to — which is exactly how the first version read. The silhouette is what
+ * makes a shoulder look like a shoulder rather than a green blob.
+ */
+const SILHOUETTE =
+  'M44 30C36 30 22 34 17 42C14 47 12 62 12 80L13 108 Q13 112 17 112 L25 112 Q29 112 29 108L30 80 C30 66 31 58 33 55L33 92 L32 104C32 120 34 150 35 172 Q35 176 39 176 L45 176 Q49 176 49 172L48 104 L50 100 L52 104 L51 172Q51 176 55 176 L61 176 Q65 176 65 172C66 150 68 120 68 104L67 92 L67 55C69 58 70 66 70 80L71 108 Q71 112 75 112 L83 112 Q87 112 87 108L88 80 C88 62 86 47 83 42C78 34 64 30 56 30Z';
+
 function Figure({
   parts,
   width,
@@ -97,6 +107,16 @@ function Figure({
 }) {
   return (
     <Svg width={width} height={width * 2} viewBox="0 0 100 200">
+      <Circle cx={50} cy={15} r={12} fill={colors.surfaceRaised} stroke={colors.borderStrong} strokeWidth={1.2} />
+      <Rect x={44} y={24} width={12} height={9} fill={colors.surfaceRaised} stroke={colors.borderStrong} strokeWidth={1.2} />
+      <Path
+        d={SILHOUETTE}
+        fill={colors.surfaceRaised}
+        stroke={colors.borderStrong}
+        strokeWidth={1.2}
+        strokeLinejoin="round"
+      />
+
       {parts.map((part, index) => {
         const fill = fillOf(part.muscle);
         const press = part.muscle && onPressMuscle ? () => onPressMuscle(part.muscle as MuscleGroup) : undefined;
@@ -156,10 +176,10 @@ export function MuscleMap({
 }: Props) {
   const width = height / 2;
   const fillOf = (muscle: MuscleGroup | null) => {
-    if (muscle === null) return colors.surfaceRaised;
+    if (muscle === null) return 'transparent';
     if (muscle === primary) return colors.accent;
     if (secondary.includes(muscle)) return colors.accentMuted;
-    return colors.surfaceRaised;
+    return 'transparent';
   };
 
   const showFront =
@@ -223,7 +243,8 @@ type PickerProps = {
 export function MusclePicker({ selected, onToggle, height = 220, style }: PickerProps) {
   const width = height / 2;
   const fillOf = (muscle: MuscleGroup | null) => {
-    if (muscle === null) return colors.surfaceRaised;
+    if (muscle === null) return 'transparent';
+    // Unpicked muscles stay visible on the body, just quiet.
     return selected.includes(muscle) ? colors.accent : colors.borderStrong;
   };
 
@@ -258,10 +279,10 @@ export function MuscleHeatmap({
   const peak = Math.max(1, ...Object.values(setsByMuscle).map((value) => value ?? 0));
 
   const fillOf = (muscle: MuscleGroup | null) => {
-    if (muscle === null) return colors.surfaceRaised;
+    if (muscle === null) return 'transparent';
     const share = (setsByMuscle[muscle] ?? 0) / peak;
     // Steps, not a gradient: a glance between sets resolves steps, not shades.
-    if (share <= 0) return colors.surfaceRaised;
+    if (share <= 0) return 'transparent';
     if (share < 0.5) return colors.accentMuted;
     return colors.accent;
   };

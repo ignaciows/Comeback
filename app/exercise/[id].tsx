@@ -14,6 +14,7 @@ import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
 import { FormGuideContent } from '@/features/training/FormGuide';
 import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
+import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
 import { MuscleMap } from '@/features/training/MuscleMap';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
@@ -69,6 +70,17 @@ export default function ExerciseDetailScreen() {
         }
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
       />
+
+      {meta ? (
+        <Section title="The movement">
+          <ExerciseAnimation
+            pattern={meta.pattern}
+            equipment={meta.equipment}
+            size={220}
+            caption={PATTERN_LABELS[meta.pattern]}
+          />
+        </Section>
+      ) : null}
 
       {meta ? (
         <Section title="What it works">
