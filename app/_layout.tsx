@@ -108,6 +108,8 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
           <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
           <Stack.Screen name="session" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+          {/* Guided is the whole screen while it is open: no swipe back mid-set. */}
+          <Stack.Screen name="guided" options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
           <Stack.Screen name="checkin" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="log-weight" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack>

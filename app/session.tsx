@@ -175,6 +175,16 @@ export default function SessionScreen() {
         />
       ) : null}
 
+      {/* Same session, one set at a time — for when a movement needs watching. */}
+      {!readOnly ? (
+        <SecondaryButton
+          label="Guided mode"
+          icon="play"
+          onPress={() => router.replace({ pathname: '/guided', params: { id: session.id } })}
+          style={styles.guided}
+        />
+      ) : null}
+
       {!readOnly ? (
         <RestTimer
           startedAt={restStartedAt}
@@ -503,6 +513,9 @@ const styles = StyleSheet.create({
   },
   discard: {
     alignSelf: 'center',
+  },
+  guided: {
+    marginBottom: spacing.lg,
   },
   option: {
     flexDirection: 'row',

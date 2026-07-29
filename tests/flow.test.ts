@@ -630,6 +630,13 @@ describe('main flow', () => {
 
     expect(state.sessions[0].pauses).toEqual([]);
     expect(state.sessions[0].exercises[0].skipped).toBe(false);
+
+    // v7 chooses the session screen from `training.guided`, so a stored block
+    // written before that field existed must not come back undefined — and
+    // backfilling it must not overwrite what the user had already set.
+    expect(state.training.guided).toBe(true);
+    expect(state.training.preferredDaysPerWeek).toBe(5);
+    expect(state.training.preferredWeekdays).toEqual([1, 2, 3, 5, 6]);
     // And every reader of a session copes with it.
     expect(() => selectEngine(state)).not.toThrow();
     expect(sessionProgress(state.sessions[0]).pausedSeconds).toBe(0);

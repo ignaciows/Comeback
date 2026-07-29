@@ -141,6 +141,12 @@ export interface TrainingPreferences {
   preferredWeekdays: number[];
   location: TrainingLocation;
   gymId: UUID | null;
+  /**
+   * Run sessions one set at a time, with the movement animating and a cue,
+   * rather than as a list. On by default: someone coming back is relearning
+   * technique, and the list view assumes you already know it.
+   */
+  guided: boolean;
 }
 
 export interface UserPreferences {

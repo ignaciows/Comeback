@@ -66,6 +66,30 @@ export const TRAINING_PRINCIPLES: Principle[] = [
     source: 'Standard periodisation practice; ACSM position stand (2009)',
   },
   {
+    id: 'autoregulation',
+    title: 'Let the last set pick the next weight',
+    application: 'In a guided session the suggested load moves one increment when your reps in reserve say it should.',
+    detail:
+      'Strength varies day to day with sleep, food and stress, so a weight fixed weeks in advance is right only by accident. Rating how many reps were left in the tank turns each set into the input for the next one.',
+    source: 'Helms et al. (2016) RIR-based RPE scale; Zourdos et al. (2016)',
+  },
+  {
+    id: 'focus',
+    title: 'One cue, and which kind depends on the lift',
+    application: 'Compounds get a cue about the effect of the movement; isolation work gets one about the muscle.',
+    detail:
+      'An external focus — pushing the floor away — produces more force and faster skill learning than thinking about the body part. For single-joint work aimed at growth it reverses: attention on the working muscle produced more arm growth.',
+    source: 'Wulf (2013) review; Schoenfeld et al. (2018) attentional focus trial',
+  },
+  {
+    id: 'warmup',
+    title: 'Ramp into the first heavy set',
+    application: 'Compounds over 30 kg get two or three light sets at 50, 70 and 85 % before the working weight.',
+    detail:
+      'Rehearsing the pattern under rising load raises muscle temperature and readies the movement without spending the session. Isolation work does not need it.',
+    source: 'ACSM position stand (2009); standard warm-up practice',
+  },
+  {
     id: 'protein',
     title: '1.6–2.2 g of protein per kg of body weight',
     application: 'The protein target is set from your body weight and rises during a cut.',

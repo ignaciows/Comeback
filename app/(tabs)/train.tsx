@@ -9,6 +9,7 @@ import { Reveal } from '@/components/motion/Reveal';
 import { NavGroup, NavRow } from '@/components/NavRow';
 import { Screen } from '@/components/Screen';
 import { Section } from '@/components/Section';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
@@ -35,6 +36,8 @@ export default function TrainScreen() {
   const updateRoutineExercise = useAppStore((state) => state.updateRoutineExercise);
   const gyms = useAppStore((state) => state.gyms);
   const gymId = useAppStore((state) => state.training.gymId);
+  const guided = useAppStore((state) => state.training.guided);
+  const updateTraining = useAppStore((state) => state.updateTraining);
 
   const [swapping, setSwapping] = useState<{ dayId: string; entryId: string; exerciseId: string } | null>(null);
 
@@ -44,6 +47,9 @@ export default function TrainScreen() {
   const gym = gyms.find((entry) => entry.id === gymId) ?? gyms[0] ?? null;
   const equipment = gym?.equipment ?? {};
 
+  /** Guided runs one set at a time; the list assumes you know the movements. */
+  const screen = guided ? '/guided' : '/session';
+
   const start = (routineDayId: string | null, name: string, plannedSessionId: string | null) => {
     const id = startSession({
       routineId: routine?.id ?? null,
@@ -52,7 +58,7 @@ export default function TrainScreen() {
       name,
       plannedSessionId,
     });
-    router.push({ pathname: '/session', params: { id } });
+    router.push({ pathname: screen, params: { id } });
   };
 
   return (
@@ -67,7 +73,7 @@ export default function TrainScreen() {
               </Text>
               <PrimaryButton
                 label="Resume"
-                onPress={() => router.push({ pathname: '/session', params: { id: activeSession.id } })}
+                onPress={() => router.push({ pathname: screen, params: { id: activeSession.id } })}
                 style={styles.cta}
               />
             </>
@@ -100,6 +106,17 @@ export default function TrainScreen() {
           {!activeSession && nextDay ? (
             <TextButton label="Something else today" onPress={() => start(null, 'Free session', null)} style={styles.alt} />
           ) : null}
+
+          {/* Guided while you are relearning the movements, list once you are not. */}
+          <SegmentedControl
+            options={[
+              { value: 'guided', label: 'Guided', detail: 'One set at a time' },
+              { value: 'list', label: 'List', detail: 'Everything at once' },
+            ]}
+            value={guided ? 'guided' : 'list'}
+            onChange={(value) => updateTraining({ guided: value === 'guided' })}
+            style={styles.mode}
+          />
         </View>
       </Reveal>
 
@@ -208,6 +225,10 @@ const styles = StyleSheet.create({
   alt: {
     alignSelf: 'center',
     marginTop: spacing.sm,
+  },
+  mode: {
+    alignSelf: 'stretch',
+    marginTop: spacing.lg,
   },
   group: {
     marginTop: spacing.xl,

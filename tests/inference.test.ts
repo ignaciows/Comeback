@@ -230,6 +230,7 @@ describe('what the app does about it', () => {
     preferredWeekdays: [1, 2, 4, 5],
     location: 'gym',
     gymId: null,
+    guided: true,
   };
   const preferences: UserPreferences = { units: 'metric', defaultRestSeconds: 90, weekStartsOn: 1 };
 

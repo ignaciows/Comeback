@@ -40,6 +40,8 @@ export default function TodayScreen() {
   const applied = useAppStore((state) => state.appliedProposals);
   const hasGym = useAppStore((state) => state.gyms.length > 0);
   const { setup } = useNextStep();
+  // Guided runs the session one set at a time; the choice lives on the Train tab.
+  const sessionScreen = useAppStore((state) => (state.training.guided ? '/guided' : '/session'));
 
   const date = todayOf();
   const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
@@ -58,7 +60,7 @@ export default function TodayScreen() {
       plannedSessionId: todayPlanned?.id ?? null,
     });
     track({ name: 'recommendation_followed', type: recommendation.type });
-    router.push({ pathname: '/session', params: { id } });
+    router.push({ pathname: sessionScreen, params: { id } });
   };
 
   const intentFor = () => {
@@ -123,7 +125,7 @@ export default function TodayScreen() {
           {activeSession ? (
             <PrimaryButton
               label="Resume"
-              onPress={() => router.push({ pathname: '/session', params: { id: activeSession.id } })}
+              onPress={() => router.push({ pathname: sessionScreen, params: { id: activeSession.id } })}
               style={styles.cta}
             />
           ) : resting ? (

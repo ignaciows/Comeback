@@ -53,6 +53,7 @@ const DEFAULT_TRAINING: TrainingPreferences = {
   preferredWeekdays: [1, 2, 4, 5],
   location: 'gym',
   gymId: null,
+  guided: true,
 };
 
 const DEFAULT_PREFERENCES: UserPreferences = {
@@ -237,7 +238,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -368,6 +369,8 @@ export const useAppStore = create<Store>()(
           preferredWeekdays: payload.preferredWeekdays,
           location: payload.location,
           gymId: null,
+          // Coming back means relearning the movements: guided until told otherwise.
+          guided: true,
         };
 
         const planRequest: PlanRequest = {
@@ -1602,7 +1605,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 6,
+      version: 7,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1623,8 +1626,14 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 6,
+            schemaVersion: 7,
             appliedProposals: value.appliedProposals ?? [],
+            training: {
+              ...DEFAULT_TRAINING,
+              ...value.training,
+              // v7 added the guided session mode.
+              guided: value.training?.guided ?? true,
+            },
             profile: value.profile
               ? {
                   ...value.profile,
