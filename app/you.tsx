@@ -53,6 +53,48 @@ export default function YouScreen() {
         />
       </Section>
 
+      <Section
+        title="Frame"
+        footnote="The wrist is almost all bone, so it barely changes. It is the cheapest read on your frame."
+      >
+        <NumberInput
+          label="Wrist"
+          value={profile?.wristCm ?? null}
+          onChange={(value) => updateProfile({ wristCm: value })}
+          suffix="cm"
+          step={0.5}
+          precision={1}
+          placeholder="17.0"
+        />
+      </Section>
+
+      <Section
+        title="Arms"
+        footnote="Relative to your torso. Long arms lengthen a press and shorten a deadlift."
+      >
+        <SegmentedControl
+          options={[
+            { value: 'short', label: 'Short' },
+            { value: 'average', label: 'Average' },
+            { value: 'long', label: 'Long' },
+          ]}
+          value={profile?.armLength ?? 'average'}
+          onChange={(value) => updateProfile({ armLength: value })}
+        />
+      </Section>
+
+      <Section title="Legs" footnote="Long femurs turn a back squat into a hinge, so the plan picks differently.">
+        <SegmentedControl
+          options={[
+            { value: 'short', label: 'Short' },
+            { value: 'average', label: 'Average' },
+            { value: 'long', label: 'Long' },
+          ]}
+          value={profile?.legLength ?? 'average'}
+          onChange={(value) => updateProfile({ legLength: value })}
+        />
+      </Section>
+
       <Section title="Training age" footnote="Sets how fast the plan assumes you can add muscle.">
         <SegmentedControl
           options={[

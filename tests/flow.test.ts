@@ -25,6 +25,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 
 const { useAppStore, selectEngine } = await import('@/store/useAppStore');
 const { sessionProgress } = await import('@/domain/training/sessionProgress');
+const { analyseComposition, frameSize } = await import('@/domain/body/composition');
 const { STORAGE_KEY } = await import('@/services/storage/adapter');
 const { today } = await import('@/utils/date');
 
@@ -632,6 +633,29 @@ describe('main flow', () => {
     // And every reader of a session copes with it.
     expect(() => selectEngine(state)).not.toThrow();
     expect(sessionProgress(state.sessions[0]).pausedSeconds).toBe(0);
+  });
+
+  it('gives an older profile the frame and limb fields the body model reads', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    const state = useAppStore.getState();
+
+    // Seeded through the real onboarding path, so the defaults are the ones a
+    // migrated profile would also land on.
+    expect(state.profile?.armLength).toBe('average');
+    expect(state.profile?.legLength).toBe('average');
+    expect(state.profile?.wristCm).toBeNull();
+
+    // And the body model runs on a profile that never measured a wrist.
+    const composition = analyseComposition({
+      heightCm: state.profile!.heightCm,
+      weightKg: state.bodyMeasurements.at(-1)!.weightKg,
+      bodyFatPercent: state.bodyMeasurements.at(-1)!.bodyFatPercent,
+      sex: state.profile!.sex,
+      wristCm: state.profile!.wristCm,
+      experience: state.profile!.experience,
+    });
+    expect(composition.ffmi).toBeGreaterThan(0);
+    expect(frameSize(state.profile!.heightCm, state.profile!.wristCm)).toBe(0.5);
   });
 
   it('follows a plan the user built, carrying its blocks with it', () => {

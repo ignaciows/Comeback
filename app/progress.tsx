@@ -67,6 +67,12 @@ export default function ProgressScreen() {
             onPress={() => router.push('/momentum')}
           />
           <NavRow
+            label="Your body"
+            icon="body"
+            detail="Now, and what the plan turns it into"
+            onPress={() => router.push('/body-shape')}
+          />
+          <NavRow
             label="Body weight"
             icon="body"
             value={latestWeight ? `${latestWeight.weightKg.toFixed(1)} kg` : 'Not logged'}

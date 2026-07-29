@@ -269,6 +269,12 @@ export default function PlanTab() {
             dot={engine.proposals.length > 0}
             onPress={() => router.push('/knows')}
           />
+          <NavRow
+            label="Your body"
+            icon="body"
+            detail="Now, and at the end of each phase"
+            onPress={() => router.push('/body-shape')}
+          />
           <NavRow label="Journal" icon="journal" onPress={() => router.push('/journal')} />
           <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
         </NavGroup>

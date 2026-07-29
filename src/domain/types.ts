@@ -23,6 +23,15 @@ export type GoalType =
   | 'maintain';
 
 export type ExperienceLevel = 'beginner' | 'returning' | 'intermediate' | 'advanced';
+
+/**
+ * Limb proportions, which are geometry rather than physiology.
+ *
+ * Long femurs make an upright squat mechanically hard; long arms lengthen a
+ * bench press and shorten a deadlift. This is the part of "body type" that
+ * actually changes a plan — see `docs/body-model.md`.
+ */
+export type LimbLength = 'short' | 'average' | 'long';
 export type BiologicalSex = 'male' | 'female' | 'unspecified';
 
 /**
@@ -92,6 +101,14 @@ export interface Profile {
   /** Only used for the calorie estimate; assumed when not set. */
   age: number | null;
   sex: BiologicalSex;
+  /**
+   * Wrist circumference, cm. The one cheap proxy for skeletal frame — it is
+   * almost all bone, so it barely moves with training or with fat.
+   */
+  wristCm: number | null;
+  /** Arms and legs relative to torso. Changes which lifts suit the person. */
+  armLength: LimbLength;
+  legLength: LimbLength;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 }

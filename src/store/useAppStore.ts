@@ -237,7 +237,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -336,6 +336,9 @@ export const useAppStore = create<Store>()(
           layoffWeeks: payload.layoffWeeks,
           age: null,
           sex: 'unspecified',
+          wristCm: null,
+          armLength: 'average',
+          legLength: 'average',
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -1599,7 +1602,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 5,
+      version: 6,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1620,8 +1623,17 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 5,
+            schemaVersion: 6,
             appliedProposals: value.appliedProposals ?? [],
+            profile: value.profile
+              ? {
+                  ...value.profile,
+                  // v6 added the frame and limb-proportion fields.
+                  wristCm: value.profile.wristCm ?? null,
+                  armLength: value.profile.armLength ?? 'average',
+                  legLength: value.profile.legLength ?? 'average',
+                }
+              : value.profile,
             goal: value.goal
               ? {
                   ...value.goal,
