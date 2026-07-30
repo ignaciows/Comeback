@@ -120,6 +120,14 @@ export interface Goal {
   objective: PlanObjective;
   speed: PlanSpeed;
   fatTolerance: FatTolerance;
+  /**
+   * A hard limit on body fat, in percent, or null for none.
+   *
+   * Different from `fatTolerance`, which is a preference about the pace. This
+   * is a line the plan may not cross: it decides where a building phase ends,
+   * rather than how fast it runs.
+   */
+  maxBodyFatPercent: number | null;
   /** Derived from the three above. Drives every projection. */
   strategy: NutritionStrategy;
   /** Muscles to bias volume towards. Empty means a balanced routine. */

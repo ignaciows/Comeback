@@ -321,6 +321,16 @@ export default function GuidedScreen() {
           {`Exercise ${current.position + 1} of ${current.total} · set ${current.index + 1} of ${totalSets}`}
         </Label>
 
+        {/* What the plan asks for, stated before you are asked to decide
+            anything. The steppers below are there to disagree with it, not to
+            be the only way to answer. */}
+        <View style={styles.prescription}>
+          <Icon name="target" size={13} color={colors.textTertiary} />
+          <Text variant="caption" tone="secondary">
+            {`Your plan: ${totalSets} × ${prescription.repMin}–${prescription.repMax} reps`}
+          </Text>
+        </View>
+
         {/* One thing to think about. Never a list. */}
         {cue ? (
           <View style={styles.cue}>
@@ -548,6 +558,13 @@ const styles = StyleSheet.create({
   setLabel: {
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  prescription: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
   },
   cue: {
     flexDirection: 'row',

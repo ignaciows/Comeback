@@ -284,6 +284,13 @@ export default function PlanTab() {
               />
             ) : null}
             <NavRow label="Build your own" icon="edit" detail="Drag the blocks" onPress={() => router.push('/builder')} />
+            <NavRow
+              label="Fat limit"
+              icon="body"
+              value={goal?.maxBodyFatPercent ? `${goal.maxBodyFatPercent} %` : 'None'}
+              detail="Where building phases have to stop"
+              onPress={() => router.push('/fat-ceiling')}
+            />
             {routeProgress?.nextBlock ? null : (
               <NavRow
                 label="Named plans"

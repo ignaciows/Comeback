@@ -14,6 +14,7 @@ import { Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
 import { estimateRoutineDayMinutes } from '@/data/routineTemplates';
+import { describeDay } from '@/domain/training/dayDescription';
 import { ExerciseRow } from '@/features/training/ExerciseRow';
 import { useActiveRoutine, useActiveSession, useCompletedSessions, useEngine } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -83,8 +84,13 @@ export default function TrainScreen() {
               <Text variant="display" style={styles.heroTitle}>
                 {nextDay.name}
               </Text>
+              {/* "Upper A" means nothing on your first week. This says what
+                  is actually in the day, read off the exercises themselves. */}
               <Text variant="body" tone="secondary" style={styles.heroLine}>
-                {`${nextDay.exercises.length} exercises · about ${estimateRoutineDayMinutes(nextDay)} minutes`}
+                {describeDay(nextDay).plain}
+              </Text>
+              <Text variant="caption" tone="tertiary" style={styles.heroNote}>
+                {`About ${estimateRoutineDayMinutes(nextDay)} minutes`}
               </Text>
               <PrimaryButton
                 label="Start"
@@ -215,6 +221,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     fontSize: 40,
     lineHeight: 44,
+  },
+  heroNote: {
+    marginTop: spacing.sm,
   },
   heroLine: {
     marginTop: spacing.sm,

@@ -159,6 +159,8 @@ export type OnboardingPayload = {
   objective: PlanObjective;
   speed: PlanSpeed;
   fatTolerance: FatTolerance;
+  /** Optional hard limit on body fat. Null or absent means no limit. */
+  maxBodyFatPercent?: number | null;
   strategy?: NutritionStrategy;
   muscleFocus?: MuscleGroup[];
   targetWeightKg: number | null;
@@ -315,7 +317,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 9,
+  schemaVersion: 10,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -430,6 +432,7 @@ export const useAppStore = create<Store>()(
           type: payload.goalType,
           objective: payload.objective,
           speed: payload.speed,
+          maxBodyFatPercent: payload.maxBodyFatPercent ?? null,
           fatTolerance: payload.fatTolerance,
           strategy,
           muscleFocus: payload.muscleFocus ?? [],
@@ -1743,7 +1746,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 9,
+      version: 10,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1764,7 +1767,7 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 9,
+            schemaVersion: 10,
             appliedProposals: value.appliedProposals ?? [],
             // v8 added the learning section.
             lessons: value.lessons ?? [],
@@ -1792,6 +1795,9 @@ export const useAppStore = create<Store>()(
                   objective: asObjective(value.goal.objective),
                   speed: asSpeed(value.goal.speed),
                   fatTolerance: value.goal.fatTolerance ?? 'some',
+                  // v10 added the body-fat ceiling. Null means no limit, which
+                  // is what every plan written before it was working to.
+                  maxBodyFatPercent: value.goal.maxBodyFatPercent ?? null,
                   strategy: value.goal.strategy ?? defaultStrategyFor(value.goal.type),
                 }
               : value.goal,
