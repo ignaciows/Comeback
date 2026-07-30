@@ -66,6 +66,8 @@ const ready: NextStepInput = {
   gyms: [gym],
   routines: [{ id: 'r1', name: 'Upper / Lower', daysPerWeek: 4, days: [], createdAt: '', updatedAt: '', deletedAt: null }],
   measurements: [weight(TODAY)],
+  // Assumed done in the shared fixture; the step that offers it has its own test.
+  hasAssessment: true,
   checkins: [],
   sessions: [],
   plannedSessions: [],
@@ -79,9 +81,23 @@ const blank: NextStepInput = {
   routines: [],
   measurements: [],
   hasRoute: false,
+  hasAssessment: true,
 };
 
 describe('setting the app up', () => {
+  it('offers the strength assessment once there is a gym, and stops once it is done', () => {
+    // It needs a gym first — measuring lifts you have no equipment for is
+    // theatre — and it must disappear afterwards rather than nagging.
+    const before = deriveSetupSteps({ ...ready, hasAssessment: false });
+    expect(before.some((step) => step.id === 'assessment')).toBe(true);
+
+    const after = deriveSetupSteps({ ...ready, hasAssessment: true });
+    expect(after.some((step) => step.id === 'assessment')).toBe(false);
+
+    const noGym = deriveSetupSteps({ ...ready, gyms: [], hasAssessment: false });
+    expect(noGym.some((step) => step.id === 'assessment')).toBe(false);
+  });
+
   it('asks for weight before anything else', () => {
     const steps = deriveSetupSteps(blank);
     // Nothing can be projected without it, so it outranks the rest.

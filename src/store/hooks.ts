@@ -137,6 +137,7 @@ export function useNextStep() {
   const sessions = useAppStore((state) => state.sessions);
   const plannedSessions = useAppStore((state) => state.plannedSessions);
   const planRoute = useAppStore((state) => state.planRoute);
+  const assessment = useAppStore((state) => state.assessment);
   const activeSessionId = useAppStore((state) => state.activeSessionId);
 
   const date = todayOf();
@@ -153,6 +154,7 @@ export function useNextStep() {
       sessions,
       plannedSessions,
       hasRoute: planRoute !== null,
+      hasAssessment: assessment !== null,
       activeSessionId,
     };
 
@@ -172,6 +174,7 @@ export function useNextStep() {
     sessions,
     plannedSessions,
     planRoute,
+    assessment,
     activeSessionId,
   ]);
 }

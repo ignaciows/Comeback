@@ -14,12 +14,15 @@ import { Label, Text } from '@/design-system/Text';
 import { motion, useLoop } from '@/design-system/motion';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { cuesFor } from '@/data/coachingCues';
-import { exerciseName, getExercise } from '@/data/exercises';
+import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
 import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
+import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
+import { Stepper } from '@/features/training/Stepper';
+import { BottomSheet } from '@/components/BottomSheet';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -46,17 +49,23 @@ export default function GuidedScreen() {
   const removeSet = useAppStore((state) => state.removeSet);
   const addSet = useAppStore((state) => state.addSet);
   const addExerciseToSession = useAppStore((state) => state.addExerciseToSession);
+  const substituteExercise = useAppStore((state) => state.substituteExercise);
+  const gyms = useAppStore((state) => state.gyms);
+  const gymId = useAppStore((state) => state.training.gymId);
   const toggleExerciseSkipped = useAppStore((state) => state.toggleExerciseSkipped);
   const pauseSession = useAppStore((state) => state.pauseSession);
   const resumeSession = useAppStore((state) => state.resumeSession);
   const finishSession = useAppStore((state) => state.finishSession);
   const routines = useAppStore((state) => state.routines);
+  const assessment = useAppStore((state) => state.assessment);
+  const profile = useAppStore((state) => state.profile);
 
   useKeepAwake();
 
   const [restUntil, setRestUntil] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [picking, setPicking] = useState(false);
+  const [swapping, setSwapping] = useState(false);
   const [weight, setWeight] = useState<number | null>(null);
   const [reps, setReps] = useState<number | null>(null);
 
@@ -85,7 +94,22 @@ export default function GuidedScreen() {
     return null;
   }, [session]);
 
-  /** What the last time this exercise was trained looked like. */
+  const prescriptionReps = useMemo(() => {
+    if (!current || !session) return 8;
+    const routine = routines.find((entry) => entry.id === session.routineId);
+    const day = routine?.days.find((entry) => entry.id === session.routineDayId);
+    const planned = day?.exercises.find((entry) => entry.exerciseId === current.exercise.exerciseId);
+    return planned?.repMin ?? 8;
+  }, [current, session, routines]);
+
+  /**
+   * What the last time this exercise was trained looked like — and failing
+   * that, what the assessment measured.
+   *
+   * Without the second half, the first session of every new movement opens
+   * with no suggested weight at all, which is exactly the guesswork the
+   * assessment exists to remove.
+   */
   const previousBest = useMemo(() => {
     if (!current || !session) return null;
     const earlier = sessions
@@ -99,8 +123,22 @@ export default function GuidedScreen() {
         .sort((a, b) => (b.weightKg ?? 0) - (a.weightKg ?? 0))[0];
       if (best) return { weightKg: best.weightKg, reps: best.reps };
     }
+
+    const measured = assessment?.results.find(
+      (entry) => entry.exerciseId === current.exercise.exerciseId,
+    );
+    if (measured) {
+      const load = startingLoad(
+        measured,
+        prescriptionReps,
+        profile?.experience ?? 'returning',
+        profile?.layoffWeeks ?? 0,
+      );
+      if (load) return { weightKg: load.weightKg, reps: load.reps };
+    }
+
     return null;
-  }, [current, session, sessions]);
+  }, [current, session, sessions, assessment, profile, prescriptionReps]);
 
   const prescription = useMemo(() => {
     if (!current || !session) return { repMin: 8, repMax: 12 };
@@ -130,6 +168,9 @@ export default function GuidedScreen() {
     setWeight(current.set.weightKg ?? suggestion.weightKg);
     setReps(current.set.reps ?? suggestion.reps);
   }, [current?.set.id, suggestion?.weightKg, suggestion?.reps]);
+
+  // Which gym you are in decides which swaps are even possible.
+  const equipment = gyms.find((entry) => entry.id === gymId)?.equipment ?? gyms[0]?.equipment ?? {};
 
   const progress = session ? sessionProgress(session, new Date(now)) : null;
   const meta = current ? getExercise(current.exercise.exerciseId) : null;
@@ -371,6 +412,9 @@ export default function GuidedScreen() {
         <View style={styles.secondary}>
           <TextButton label="One more set" onPress={addAnotherSet} />
           <TextButton label="Add exercise" onPress={() => setPicking(true)} />
+          {/* The single most common reason a plan gets abandoned mid-session:
+              the machine is taken and there is no obvious second choice. */}
+          <TextButton label="Machine taken" onPress={() => setSwapping(true)} />
         </View>
 
         <View style={styles.secondary}>
@@ -388,6 +432,39 @@ export default function GuidedScreen() {
         onClose={() => setPicking(false)}
         onPick={(exerciseId) => addExerciseToSession(session.id, exerciseId)}
       />
+
+      {/* Swaps that work the same muscle, with anything your gym does not have
+          marked as such rather than quietly offered. */}
+      <BottomSheet
+        visible={swapping}
+        onClose={() => setSwapping(false)}
+        title="Use something else"
+        subtitle={`Instead of ${exerciseName(current.exercise.exerciseId)}`}
+      >
+        {findSubstitutions(current.exercise.exerciseId, equipment).map((option) => (
+          <Pressable
+            key={option.exercise.id}
+            onPress={() => {
+              Haptics.selectionAsync();
+              substituteExercise(session.id, current.exercise.id, option.exercise.id);
+              setSwapping(false);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={option.exercise.name}
+            style={({ pressed }) => [styles.swap, pressed && { opacity: opacity.pressed }]}
+          >
+            <View style={styles.swapText}>
+              <Text variant="body">{option.exercise.name}</Text>
+              <Text variant="caption" tone="tertiary">
+                {option.availableHere ? option.reason : `${option.reason} · not in your gym`}
+              </Text>
+            </View>
+            {option.availableHere ? (
+              <Icon name="check" size={14} color={colors.accent} />
+            ) : null}
+          </Pressable>
+        ))}
+      </BottomSheet>
     </Screen>
   );
 }
@@ -437,68 +514,6 @@ function SessionBarTop({
             accessibilityLabel={`Set ${index + 1}`}
           />
         ))}
-      </View>
-    </View>
-  );
-}
-
-/** A big number you can change without looking at your phone properly. */
-function Stepper({
-  label,
-  value,
-  step,
-  suffix,
-  onChange,
-}: {
-  label: string;
-  value: number | null;
-  step: number;
-  suffix?: string;
-  onChange: (value: number) => void;
-}) {
-  const nudge = (direction: -1 | 1) => {
-    Haptics.selectionAsync();
-    onChange(Math.max(0, Math.round(((value ?? 0) + direction * step) * 10) / 10));
-  };
-
-  return (
-    <View style={styles.stepper}>
-      <Label>{label}</Label>
-
-      <View style={styles.stepperRow}>
-        <Pressable
-          onPress={() => nudge(-1)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={`Less ${label}`}
-          style={({ pressed }) => [styles.stepButton, pressed && { opacity: opacity.pressed }]}
-        >
-          <Icon name="minus" size={20} color={colors.text} />
-        </Pressable>
-
-        <View style={styles.stepperValue}>
-          <AnimatedNumber
-            value={value}
-            decimals={value !== null && value % 1 !== 0 ? 1 : 0}
-            variant="display"
-            style={styles.stepperNumber}
-          />
-          {suffix ? (
-            <Text variant="caption" tone="tertiary">
-              {suffix}
-            </Text>
-          ) : null}
-        </View>
-
-        <Pressable
-          onPress={() => nudge(1)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={`More ${label}`}
-          style={({ pressed }) => [styles.stepButton, pressed && { opacity: opacity.pressed }]}
-        >
-          <Icon name="plus" size={20} color={colors.text} />
-        </Pressable>
       </View>
     </View>
   );
@@ -559,6 +574,21 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
+  swap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+  },
+  swapText: {
+    flex: 1,
+    gap: spacing.xs,
+  },
   prescription: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -585,33 +615,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.lg,
     marginTop: spacing.xl,
-  },
-  stepper: {
-    flex: 1,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  stepperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  stepButton: {
-    width: 44,
-    height: 44,
-    borderRadius: radius.pill,
-    borderWidth: borderWidth.hairline,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperValue: {
-    alignItems: 'center',
-  },
-  stepperNumber: {
-    fontSize: 40,
-    lineHeight: 44,
   },
   reason: {
     textAlign: 'center',

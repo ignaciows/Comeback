@@ -58,6 +58,8 @@ export type NextStepInput = {
   plannedSessions: PlannedSession[];
   /** Whether a multi-block plan is being followed. */
   hasRoute: boolean;
+  /** Whether the one-off starting-strength assessment has been done. */
+  hasAssessment: boolean;
   activeSessionId: string | null;
 };
 
@@ -97,6 +99,20 @@ export function deriveSetupSteps(input: NextStepInput): NextStep[] {
       icon: 'target',
       route: '/routes',
       priority: 3,
+    });
+  }
+
+  // After the gym, because it needs equipment, and before muscle focus,
+  // because knowing what you lift matters more than which muscle you favour.
+  if (!input.hasAssessment && input.gyms.length > 0) {
+    steps.push({
+      id: 'assessment',
+      kind: 'setup',
+      label: 'Measure your starting strength',
+      why: 'One session of test sets, so the weights it gives you are yours and not a guess.',
+      icon: 'target',
+      route: '/assessment',
+      priority: 4,
     });
   }
 

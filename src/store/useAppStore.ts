@@ -14,6 +14,7 @@ import { getRoute, type FollowedRoute, type PlanRoute } from '@/domain/plan/rout
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
 import type { LessonRecord } from '@/domain/learning';
+import type { RepOut } from '@/domain/training/assessment';
 import { previousPlan, pushSnapshot, type PlanSnapshot } from '@/domain/plan/history';
 import { adaptSetCount } from '@/domain/training/adaptation';
 import { applyEmphasis } from '@/domain/training/volume';
@@ -206,6 +207,14 @@ export type AppState = {
   lessons: LessonRecord[];
   /** Plans you were on before, most recent last, so changes are reversible. */
   planHistory: PlanSnapshot[];
+  /**
+   * What the one-off assessment measured, if it has been done.
+   *
+   * Kept separately from sessions: these are test sets taken to find a
+   * starting point, not training, and counting them as workouts would inflate
+   * every adherence number built on top.
+   */
+  assessment: { takenOn: ISODate; results: RepOut[] } | null;
 };
 
 type Actions = {
@@ -303,6 +312,8 @@ type Actions = {
   dismissProposal: (id: string) => void;
   /** Marks a lesson read. Reading it twice does not create a second record. */
   completeLesson: (lessonId: string, gotItFirstTry: boolean) => void;
+  /** Records the starting-strength assessment. Redoing it replaces the old one. */
+  saveAssessment: (results: RepOut[]) => void;
   /**
    * Restores the plan captured before the last change and drops it from the
    * history. Sessions, weigh-ins and check-ins are untouched: they record what
@@ -317,7 +328,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 10,
+  schemaVersion: 11,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -339,6 +350,7 @@ const initialState: AppState = {
   appliedProposals: [],
   lessons: [],
   planHistory: [],
+  assessment: null,
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -1616,6 +1628,11 @@ export const useAppStore = create<Store>()(
         track({ name: 'plan_reconfigured', reason: 'reverted' });
       },
 
+      saveAssessment: (results) => {
+        set({ assessment: { takenOn: todayOf(), results } });
+        track({ name: 'plan_reconfigured', reason: 'assessment' });
+      },
+
       completeLesson: (lessonId, gotItFirstTry) =>
         set((state) => {
           // Re-reading a lesson is normal and must not stack up records, or
@@ -1746,7 +1763,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 10,
+      version: 11,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1767,12 +1784,14 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 10,
+            schemaVersion: 11,
             appliedProposals: value.appliedProposals ?? [],
             // v8 added the learning section.
             lessons: value.lessons ?? [],
             // v9 made plan changes reversible.
             planHistory: value.planHistory ?? [],
+            // v11 added the starting-strength assessment.
+            assessment: value.assessment ?? null,
             training: {
               ...DEFAULT_TRAINING,
               ...value.training,

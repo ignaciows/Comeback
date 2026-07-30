@@ -19,7 +19,7 @@ import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
-import { PhaseTrack } from '@/features/plan/PhaseTrack';
+import { PhaseGrid } from '@/features/plan/PhaseGrid';
 import { PlanVerdictCard, verdictActionLabel } from '@/features/plan/PlanVerdictCard';
 import { RequirementList } from '@/features/plan/RequirementList';
 import { VolumeBars } from '@/features/plan/VolumeBars';
@@ -174,7 +174,7 @@ export default function PlanTab() {
             action={{ label: 'See it all', onPress: () => router.push('/roadmap') }}
             footnote={`${phases.length} phases · what to eat and how to train in each`}
           >
-            <PhaseTrack phases={phases} />
+            <PhaseGrid phases={phases} onPressPhase={() => router.push('/roadmap')} />
           </Section>
         </Reveal>
       ) : null}
