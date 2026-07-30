@@ -15,6 +15,7 @@ import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
+import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
@@ -76,6 +77,8 @@ export default function PlanTab() {
   const journal = useMemo(() => summariseJournal(grid), [grid]);
 
   const hasRoute = useAppStore((state) => state.planRoute !== null);
+  const planHistory = useAppStore((state) => state.planHistory);
+  const notSticking = revertSuggestion(planHistory, allSessions, todayOf());
   const actionLabel = verdictActionLabel(verdict);
 
   const act = () => {
@@ -166,7 +169,11 @@ export default function PlanTab() {
 
       {phases.length > 0 ? (
         <Reveal index={3}>
-          <Section title="The road" footnote={`${phases.length} phases · tap one to see what it does`}>
+          <Section
+            title="The road"
+            action={{ label: 'See it all', onPress: () => router.push('/roadmap') }}
+            footnote={`${phases.length} phases · what to eat and how to train in each`}
+          >
             <PhaseTrack phases={phases} />
           </Section>
         </Reveal>
@@ -220,7 +227,7 @@ export default function PlanTab() {
       </Reveal>
 
       {/* Anything that needs attention, and only that. */}
-      {routeProgress?.nextBlock || drift ? (
+      {routeProgress?.nextBlock || drift || notSticking ? (
         <Reveal index={7}>
           <NavGroup style={styles.group}>
             {routeProgress?.nextBlock ? (
@@ -241,6 +248,17 @@ export default function PlanTab() {
                 onPress={() => router.push('/why')}
               />
             ) : null}
+            {/* Only on evidence: the plan changed, enough time passed, and
+                training dropped off since. Never as a nudge. */}
+            {notSticking ? (
+              <NavRow
+                label={notSticking.headline}
+                detail={notSticking.detail}
+                tone="warning"
+                dot
+                onPress={() => router.push('/previous-plan')}
+              />
+            ) : null}
           </NavGroup>
         </Reveal>
       ) : null}
@@ -257,6 +275,14 @@ export default function PlanTab() {
         <Section title="Change it">
           <NavGroup style={styles.group}>
             <NavRow label="Change the plan" icon="target" onPress={() => router.push('/adjust')} />
+            {planHistory.length > 0 ? (
+              <NavRow
+                label="The plan you were on"
+                icon="restart"
+                detail={planHistory[planHistory.length - 1].reason}
+                onPress={() => router.push('/previous-plan')}
+              />
+            ) : null}
             <NavRow label="Build your own" icon="edit" detail="Drag the blocks" onPress={() => router.push('/builder')} />
             {routeProgress?.nextBlock ? null : (
               <NavRow

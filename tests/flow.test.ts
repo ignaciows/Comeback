@@ -144,6 +144,74 @@ describe('main flow', () => {
     expect(parsed.state.hydrated).toBeUndefined();
   });
 
+  it('can go back to the plan you were on without undoing anything you did', () => {
+    useAppStore.getState().completeOnboarding(onboarding);
+    useAppStore.getState().applyPlanIntent({
+      objective: 'recomp',
+      speed: 'steady',
+      fatTolerance: 'some',
+      targetWeightKg: 80,
+      horizonWeeks: 16,
+    });
+
+    // Train, and log a weight, so there is real history to protect.
+    const sessionId = useAppStore.getState().startSession({ intent: 'free', name: 'Free session' });
+    useAppStore.getState().addExerciseToSession(sessionId, 'back_squat');
+    const exercise = useAppStore.getState().sessions.find((s) => s.id === sessionId)!.exercises[0];
+    useAppStore
+      .getState()
+      .updateSet(sessionId, exercise.id, exercise.sets[0].id, { weightKg: 100, reps: 5, completed: true });
+    useAppStore.getState().finishSession(sessionId);
+    useAppStore.getState().logBodyWeight(78.4);
+
+    const sessionsBefore = useAppStore.getState().sessions.length;
+    const weightsBefore = useAppStore.getState().bodyMeasurements.length;
+
+    // Now change your mind about the whole plan.
+    useAppStore.getState().applyPlanIntent({
+      objective: 'build',
+      speed: 'fast',
+      fatTolerance: 'whatever',
+      targetWeightKg: 88,
+      horizonWeeks: 24,
+    });
+
+    const changed = useAppStore.getState();
+    expect(changed.goal?.speed).toBe('fast');
+    expect(changed.goal?.targetWeightKg).toBe(88);
+    expect(changed.planHistory.length).toBeGreaterThan(0);
+    // The snapshot names the change in the words someone would use later.
+    expect(changed.planHistory.at(-1)!.reason).toMatch(/objective|fast|target/i);
+
+    useAppStore.getState().revertPlan();
+    const back = useAppStore.getState();
+
+    // The plan is the old one again...
+    expect(back.goal?.speed).toBe('steady');
+    expect(back.goal?.objective).toBe('recomp');
+    expect(back.goal?.targetWeightKg).toBe(80);
+    expect(back.goal?.horizonWeeks).toBe(16);
+
+    // ...and nothing that actually happened was touched. This is the whole
+    // point: reverting a plan must never read as losing your progress.
+    expect(back.sessions).toHaveLength(sessionsBefore);
+    expect(back.bodyMeasurements).toHaveLength(weightsBefore);
+    expect(back.sessions.find((s) => s.id === sessionId)?.exercises[0].sets[0].weightKg).toBe(100);
+
+    // And the snapshot is spent, so it cannot be applied twice.
+    expect(back.planHistory).toHaveLength(changed.planHistory.length - 1);
+  });
+
+  it('does nothing when there is no earlier plan to go back to', () => {
+    useAppStore.getState().completeOnboarding(onboarding);
+    const before = useAppStore.getState().goal?.speed;
+
+    useAppStore.getState().revertPlan();
+
+    expect(useAppStore.getState().goal?.speed).toBe(before);
+    expect(useAppStore.getState().planHistory).toEqual([]);
+  });
+
   it('lets a completed session be corrected afterwards and recalculates from the correction', async () => {
     useAppStore.getState().completeOnboarding(onboarding);
     const sessionId = useAppStore.getState().startSession({ intent: 'free', name: 'Free session' });

@@ -14,6 +14,7 @@ import { getRoute, type FollowedRoute, type PlanRoute } from '@/domain/plan/rout
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
 import type { LessonRecord } from '@/domain/learning';
+import { previousPlan, pushSnapshot, type PlanSnapshot } from '@/domain/plan/history';
 import { adaptSetCount } from '@/domain/training/adaptation';
 import { applyEmphasis } from '@/domain/training/volume';
 import type {
@@ -85,6 +86,69 @@ export const WEEKDAYS_FOR: Record<number, number[]> = {
   6: [1, 2, 3, 4, 5, 6],
 };
 
+/**
+ * The plan as it stands, ready to be put back.
+ *
+ * Called *before* a change, never after. Everything it reads is plan — goal,
+ * schedule, route. Nothing it reads is history, because reverting must leave
+ * every logged session, weigh-in and check-in exactly where it is.
+ */
+/**
+ * What changed, phrased the way someone would say it out loud.
+ *
+ * This is the line shown weeks later next to "go back to this", so it has to
+ * name the difference rather than the screen it was made on.
+ */
+function describeIntentChange(
+  state: AppState,
+  objective: PlanObjective,
+  speed: PlanSpeed,
+  targetWeightKg: number | null | undefined,
+): string {
+  const parts: string[] = [];
+  const goal = state.goal;
+
+  if (goal && asObjective(goal.objective) !== objective) parts.push('changed the objective');
+  if (goal && asSpeed(goal.speed) !== speed) parts.push(`went ${speed}`);
+  if (
+    goal &&
+    targetWeightKg !== undefined &&
+    targetWeightKg !== null &&
+    targetWeightKg !== goal.targetWeightKg
+  ) {
+    parts.push(`target ${targetWeightKg} kg`);
+  }
+
+  if (parts.length === 0) return 'Recalculated the plan';
+  return parts.join(', ').replace(/^./, (character) => character.toUpperCase());
+}
+
+function snapshotOf(state: AppState, reason: string): PlanSnapshot | null {
+  if (!state.goal) return null;
+
+  return {
+    id: createId(),
+    takenOn: todayOf(),
+    at: nowISO(),
+    reason,
+    goal: {
+      objective: asObjective(state.goal.objective),
+      speed: asSpeed(state.goal.speed),
+      strategy: state.goal.strategy,
+      fatTolerance: state.goal.fatTolerance,
+      targetWeightKg: state.goal.targetWeightKg,
+      horizonWeeks: state.goal.horizonWeeks,
+      muscleFocus: state.goal.muscleFocus ?? [],
+    },
+    training: {
+      preferredDaysPerWeek: state.training.preferredDaysPerWeek,
+      preferredWeekdays: state.training.preferredWeekdays,
+      sessionMinutes: state.training.sessionMinutes,
+    },
+    planRoute: state.planRoute,
+  };
+}
+
 export type OnboardingPayload = {
   name: string;
   heightCm: number;
@@ -138,6 +202,8 @@ export type AppState = {
   appliedProposals: string[];
   /** Lessons read, in the order they were read. Never expires, never resets. */
   lessons: LessonRecord[];
+  /** Plans you were on before, most recent last, so changes are reversible. */
+  planHistory: PlanSnapshot[];
 };
 
 type Actions = {
@@ -235,6 +301,12 @@ type Actions = {
   dismissProposal: (id: string) => void;
   /** Marks a lesson read. Reading it twice does not create a second record. */
   completeLesson: (lessonId: string, gotItFirstTry: boolean) => void;
+  /**
+   * Restores the plan captured before the last change and drops it from the
+   * history. Sessions, weigh-ins and check-ins are untouched: they record what
+   * happened, and going back to an older plan does not un-train you.
+   */
+  revertPlan: () => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
   resetAll: () => void;
@@ -243,7 +315,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 8,
+  schemaVersion: 9,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -264,6 +336,7 @@ const initialState: AppState = {
   planRoute: null,
   appliedProposals: [],
   lessons: [],
+  planHistory: [],
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -1177,6 +1250,9 @@ export const useAppStore = create<Store>()(
         const state = get();
         if (!state.profile) return;
 
+        // Captured before anything moves, so there is always a way back.
+        const before = snapshotOf(state, describeIntentChange(state, objective, speed, targetWeightKg));
+
         const date = todayOf();
         const latestWeight =
           [...state.bodyMeasurements].sort((a, b) => (a.date < b.date ? -1 : 1)).pop()?.weightKg ?? null;
@@ -1224,8 +1300,9 @@ export const useAppStore = create<Store>()(
             ]
           : state.phases;
 
-        set({
+        set((current) => ({
           phases,
+          planHistory: before ? pushSnapshot(current.planHistory, before) : current.planHistory,
           goal: state.goal
             ? {
                 ...state.goal,
@@ -1238,7 +1315,7 @@ export const useAppStore = create<Store>()(
                 updatedAt: timestamp,
               }
             : state.goal,
-        });
+        }));
 
         // Frequency is an output of the pace, so the schedule follows it.
         if (simulation.daysPerWeek !== state.training.preferredDaysPerWeek) {
@@ -1277,13 +1354,15 @@ export const useAppStore = create<Store>()(
        * built-in routes later cannot silently rewrite what someone built.
        */
       applyCustomPlan: (blocks) => {
+        const priorPlan = snapshotOf(get(), 'Switched to a plan you built yourself');
         const state = get();
         if (blocks.length === 0 || !state.goal) return;
 
         const date = todayOf();
         const first = blocks[0];
 
-        set({
+        set((current) => ({
+          planHistory: priorPlan ? pushSnapshot(current.planHistory, priorPlan) : current.planHistory,
           planRoute: {
             routeId: 'custom',
             startedAt: date,
@@ -1294,7 +1373,7 @@ export const useAppStore = create<Store>()(
               label: strategyProfile(block.strategy).label,
             })),
           },
-        });
+        }));
 
         get().changeStrategy(first.strategy, { note: 'Your plan' });
         get().updateTraining({
@@ -1363,10 +1442,14 @@ export const useAppStore = create<Store>()(
        * be different when they look at it.
        */
       setMuscleFocus: (muscles) => {
+        const priorFocus = snapshotOf(get(), 'Changed which muscles the plan favours');
         const state = get();
         if (!state.goal) return;
 
-        set({ goal: { ...state.goal, muscleFocus: muscles, updatedAt: nowISO() } });
+        set((current) => ({
+          planHistory: priorFocus ? pushSnapshot(current.planHistory, priorFocus) : current.planHistory,
+          goal: { ...state.goal!, muscleFocus: muscles, updatedAt: nowISO() },
+        }));
 
         const routine = state.routines.find((entry) => entry.id === state.activeRoutineId) ?? null;
         if (!routine || !state.profile) return;
@@ -1491,6 +1574,44 @@ export const useAppStore = create<Store>()(
 
       dismissProposal: (id) =>
         set((state) => ({ appliedProposals: [...state.appliedProposals, id] })),
+
+      revertPlan: () => {
+        const state = get();
+        const snapshot = previousPlan(state.planHistory);
+        if (!snapshot || !state.goal) return;
+
+        // Only the plan moves. Sessions, weigh-ins and check-ins are records of
+        // what happened and are left exactly as they are.
+        set((current) => ({
+          planHistory: current.planHistory.slice(0, -1),
+          planRoute: snapshot.planRoute,
+          goal: {
+            ...current.goal!,
+            objective: snapshot.goal.objective,
+            speed: snapshot.goal.speed,
+            strategy: snapshot.goal.strategy,
+            fatTolerance: snapshot.goal.fatTolerance,
+            targetWeightKg: snapshot.goal.targetWeightKg,
+            horizonWeeks: snapshot.goal.horizonWeeks,
+            muscleFocus: snapshot.goal.muscleFocus,
+            updatedAt: nowISO(),
+          },
+          training: {
+            ...current.training,
+            preferredDaysPerWeek: snapshot.training.preferredDaysPerWeek,
+            preferredWeekdays: snapshot.training.preferredWeekdays,
+            sessionMinutes: snapshot.training.sessionMinutes,
+          },
+        }));
+
+        // The schedule is derived from the plan, so it has to be rebuilt — but
+        // only the part that has not happened yet.
+        set((current) => ({
+          plannedSessions: keepPastAndResolved(current.plannedSessions, todayOf()),
+        }));
+        get().ensurePlan();
+        track({ name: 'plan_reconfigured', reason: 'reverted' });
+      },
 
       completeLesson: (lessonId, gotItFirstTry) =>
         set((state) => {
@@ -1622,7 +1743,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 8,
+      version: 9,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1643,10 +1764,12 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 8,
+            schemaVersion: 9,
             appliedProposals: value.appliedProposals ?? [],
             // v8 added the learning section.
             lessons: value.lessons ?? [],
+            // v9 made plan changes reversible.
+            planHistory: value.planHistory ?? [],
             training: {
               ...DEFAULT_TRAINING,
               ...value.training,
