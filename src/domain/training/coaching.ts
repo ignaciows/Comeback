@@ -134,7 +134,10 @@ export function suggestLoad(input: LoadInput): LoadSuggestion {
       };
     }
 
-    return { weightKg, reps: midReps, reason: 'Same again.', kind: 'same' };
+    // "Same again" has to mean the same reps too. Suggesting the middle of the
+    // range here is what made someone re-enter their number on every single
+    // set: they do ten, and the app keeps proposing eight.
+    return { weightKg, reps, reason: 'Same again.', kind: 'same' };
   }
 
   // --- First set of the exercise: double progression from last time --------

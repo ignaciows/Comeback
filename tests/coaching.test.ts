@@ -45,6 +45,20 @@ describe('picking the load for the next set', () => {
     expect(suggestion.weightKg).toBeLessThan(60);
   });
 
+  it('repeats the reps you actually did, not the middle of the range', () => {
+    // Otherwise every set of a workout starts by making you re-type the same
+    // number, which is the most-used screen in the app.
+    const suggestion = suggestLoad({
+      ...bench,
+      lastSet: set({ reps: 10, rir: TARGET_RIR }),
+      setsThisSession: [],
+      previousBest: null,
+    });
+
+    expect(suggestion.kind).toBe('same');
+    expect(suggestion.reps).toBe(10);
+  });
+
   it('holds when the last set landed on target', () => {
     const suggestion = suggestLoad({
       ...bench,

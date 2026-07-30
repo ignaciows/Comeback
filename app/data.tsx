@@ -24,6 +24,7 @@ export default function DataScreen() {
 
   const [confirmSeed, setConfirmSeed] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [confirmReplay, setConfirmReplay] = useState(false);
 
   return (
     <Screen>
@@ -44,6 +45,15 @@ export default function DataScreen() {
         <SecondaryButton label="Load sample history" onPress={() => setConfirmSeed(true)} />
       </Section>
 
+      {/* Same reset, named for the reason anyone actually presses it. */}
+      <Section title="Onboarding">
+        <Note style={styles.note}>
+          Clears this device and starts the first-run flow again. Useful for seeing what a new person
+          sees; everything currently stored is lost.
+        </Note>
+        <SecondaryButton label="Replay onboarding" icon="restart" onPress={() => setConfirmReplay(true)} />
+      </Section>
+
       <Section title="Delete">
         <SecondaryButton label="Delete all data" tone="danger" onPress={() => setConfirmReset(true)} />
       </Section>
@@ -55,6 +65,19 @@ export default function DataScreen() {
         message="This replaces your current sessions with four weeks of generated history."
         confirmLabel="Load"
         onConfirm={seedDeveloperProfile}
+      />
+
+      <ConfirmationSheet
+        visible={confirmReplay}
+        onClose={() => setConfirmReplay(false)}
+        title="Replay onboarding"
+        message="This device is cleared and the first-run flow starts again. Your sessions, check-ins and body weight go with it."
+        confirmLabel="Start over"
+        destructive
+        onConfirm={() => {
+          resetAll();
+          router.replace('/onboarding');
+        }}
       />
 
       <ConfirmationSheet
