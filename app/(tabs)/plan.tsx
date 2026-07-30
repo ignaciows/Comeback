@@ -119,6 +119,12 @@ export default function PlanTab() {
         <Reveal index={2}>
           <NavGroup style={styles.group}>
             <NavRow label="Change the outcome" icon="target" onPress={() => router.push('/adjust')} />
+            <NavRow
+              label="Your lifts"
+              icon="bolt"
+              detail="What each movement has compounded to"
+              onPress={() => router.push('/lifts')}
+            />
             <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
           </NavGroup>
         </Reveal>

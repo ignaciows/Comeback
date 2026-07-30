@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedProps,
+  useDerivedValue,
   useSharedValue,
   withRepeat,
   withTiming,
@@ -32,7 +33,10 @@ import type { EquipmentId, MovementPattern } from '@/domain/types';
  */
 
 import { MOVEMENTS, type Movement } from '@/features/training/movements';
-import { armPath, blend, bodyPath, farPath, solve } from '@/features/training/skeleton';
+import { BONES } from '@/features/training/skeleton';
+
+/** Copied into module scope so the worklet closes over a plain object. */
+const BONE = { ...BONES };
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -124,19 +128,78 @@ export function ExerciseAnimation({ pattern, equipment = [], size = 200, caption
    * frame in between can produce a bone of the wrong length. One shared value
    * drives all of them, so nothing can lag behind anything else.
    */
-  const bodyProps = useAnimatedProps(() => ({ d: bodyPath(solve(blend(from, to, progress.value))) }));
-  const armProps = useAnimatedProps(() => ({ d: armPath(solve(blend(from, to, progress.value))) }));
-  const farProps = useAnimatedProps(() => ({ d: farPath(solve(blend(from, to, progress.value))) }));
+  /**
+   * The whole figure, solved inside the worklet.
+   *
+   * Written out longhand rather than calling the helpers in `skeleton.ts`,
+   * and that is deliberate. Reanimated does not workletize a function
+   * imported from another module — the `'worklet'` directive is not enough
+   * across a module boundary — so calling one on the UI thread throws
+   * "undefined is not a function" at runtime, which no typecheck or unit test
+   * can see. The maths is the same forward kinematics, and `skeleton.ts`
+   * remains the tested definition of it.
+   */
+  const paths = useDerivedValue(() => {
+    const t = progress.value;
+    const mix = (a: number, b: number) => a + (b - a) * t;
 
-  const headProps = useAnimatedProps(() => {
-    const head = solve(blend(from, to, progress.value)).head;
-    return { cx: head[0], cy: head[1] };
+    const hipX = mix(from.hip[0], to.hip[0]);
+    const hipY = mix(from.hip[1], to.hip[1]);
+    const torso = mix(from.torso, to.torso);
+    const shoulderAngle = mix(from.shoulder, to.shoulder);
+    const elbowBend = mix(from.elbow, to.elbow);
+    const thighAngle = mix(from.thigh, to.thigh);
+    const kneeBend = mix(from.knee, to.knee);
+    const spreadLeg = mix(from.spreadLeg, to.spreadLeg);
+    const spreadArm = mix(from.spreadArm, to.spreadArm);
+
+    const RAD = Math.PI / 180;
+    const dx = (angle: number, length: number) => Math.sin(angle * RAD) * length;
+    const dy = (angle: number, length: number) => Math.cos(angle * RAD) * length;
+
+    const neckX = hipX + dx(torso, BONE.torso);
+    const neckY = hipY + dy(torso, BONE.torso);
+    const headX = neckX + dx(torso, BONE.neck);
+    const headY = neckY + dy(torso, BONE.neck);
+
+    const elbowX = neckX + dx(shoulderAngle, BONE.upperArm);
+    const elbowY = neckY + dy(shoulderAngle, BONE.upperArm);
+    const handX = elbowX + dx(shoulderAngle + elbowBend, BONE.forearm);
+    const handY = elbowY + dy(shoulderAngle + elbowBend, BONE.forearm);
+
+    const kneeX = hipX + dx(thighAngle, BONE.thigh);
+    const kneeY = hipY + dy(thighAngle, BONE.thigh);
+    const footX = kneeX + dx(thighAngle + kneeBend, BONE.shin);
+    const footY = kneeY + dy(thighAngle + kneeBend, BONE.shin);
+
+    const farThigh = thighAngle + spreadLeg;
+    const farKneeX = hipX + dx(farThigh, BONE.thigh);
+    const farKneeY = hipY + dy(farThigh, BONE.thigh);
+    const farFootX = farKneeX + dx(farThigh + kneeBend, BONE.shin);
+    const farFootY = farKneeY + dy(farThigh + kneeBend, BONE.shin);
+
+    const farShoulder = shoulderAngle + spreadArm;
+    const farElbowX = neckX + dx(farShoulder, BONE.upperArm);
+    const farElbowY = neckY + dy(farShoulder, BONE.upperArm);
+    const farHandX = farElbowX + dx(farShoulder + elbowBend, BONE.forearm);
+    const farHandY = farElbowY + dy(farShoulder + elbowBend, BONE.forearm);
+
+    return {
+      body: `M${headX} ${headY}L${neckX} ${neckY}L${hipX} ${hipY}L${kneeX} ${kneeY}L${footX} ${footY}`,
+      arm: `M${neckX} ${neckY}L${elbowX} ${elbowY}L${handX} ${handY}`,
+      far: `M${hipX} ${hipY}L${farKneeX} ${farKneeY}L${farFootX} ${farFootY}M${neckX} ${neckY}L${farElbowX} ${farElbowY}L${farHandX} ${farHandY}`,
+      headX,
+      headY,
+      handX,
+      handY,
+    };
   });
 
-  const handProps = useAnimatedProps(() => {
-    const hand = solve(blend(from, to, progress.value)).hand;
-    return { cx: hand[0], cy: hand[1] };
-  });
+  const bodyProps = useAnimatedProps(() => ({ d: paths.value.body }));
+  const armProps = useAnimatedProps(() => ({ d: paths.value.arm }));
+  const farProps = useAnimatedProps(() => ({ d: paths.value.far }));
+  const headProps = useAnimatedProps(() => ({ cx: paths.value.headX, cy: paths.value.headY }));
+  const handProps = useAnimatedProps(() => ({ cx: paths.value.handX, cy: paths.value.handY }));
 
   const limb = {
     stroke: colors.text,

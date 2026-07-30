@@ -104,3 +104,40 @@ describe('the figure holds together', () => {
     }
   });
 });
+
+describe('the animation and the model agree', () => {
+  it('solves to the same joints the screen draws', () => {
+    // `ExerciseAnimation` writes this arithmetic out longhand inside its own
+    // worklet, because Reanimated cannot call across a module boundary. That
+    // duplication is the price of the fix, and this is what stops the two
+    // drifting: the same inputs must give the same figure.
+    const RAD = Math.PI / 180;
+    const dx = (angle: number, length: number) => Math.sin(angle * RAD) * length;
+    const dy = (angle: number, length: number) => Math.cos(angle * RAD) * length;
+
+    for (const movement of Object.values(MOVEMENTS)) {
+      for (const step of [0, 0.37, 1]) {
+        const frame = blend(movement.from, movement.to, step);
+        const mine = solve(frame);
+
+        const neck: [number, number] = [
+          frame.hip[0] + dx(frame.torso, BONES.torso),
+          frame.hip[1] + dy(frame.torso, BONES.torso),
+        ];
+        const elbow: [number, number] = [
+          neck[0] + dx(frame.shoulder, BONES.upperArm),
+          neck[1] + dy(frame.shoulder, BONES.upperArm),
+        ];
+        const hand: [number, number] = [
+          elbow[0] + dx(frame.shoulder + frame.elbow, BONES.forearm),
+          elbow[1] + dy(frame.shoulder + frame.elbow, BONES.forearm),
+        ];
+
+        expect(mine.neck[0]).toBeCloseTo(neck[0], 6);
+        expect(mine.neck[1]).toBeCloseTo(neck[1], 6);
+        expect(mine.hand[0]).toBeCloseTo(hand[0], 6);
+        expect(mine.hand[1]).toBeCloseTo(hand[1], 6);
+      }
+    }
+  });
+});

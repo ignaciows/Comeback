@@ -13,6 +13,14 @@
  * nothing can change how long it is. The stretch is not fixed here, it is
  * unrepresentable.
  *
+ * Note on where this runs: the animation does **not** call into here. A
+ * function imported from another module is not workletized by Reanimated —
+ * a `'worklet'` directive does not survive the module boundary — so calling
+ * one from the UI thread throws at runtime, invisibly to both the typechecker
+ * and the unit tests. `ExerciseAnimation` writes the same arithmetic out
+ * longhand inside its own worklet; this file stays the tested definition of
+ * it, and the tests below are what keep the two honest.
+ *
  * Convention: a 100×100 box, y downwards, angles in degrees where 0 points
  * straight down and 180 straight up. Every angle is absolute except the elbow
  * and knee, which are measured relative to the limb above them — that is how
@@ -76,13 +84,11 @@ export type Skeleton = {
 
 /** Unit vector for an angle, with 0 pointing down the screen. */
 function direction(degrees: number): Point {
-  'worklet';
   const radians = (degrees * Math.PI) / 180;
   return [Math.sin(radians), Math.cos(radians)];
 }
 
 function step(from: Point, degrees: number, length: number): Point {
-  'worklet';
   const [dx, dy] = direction(degrees);
   return [from[0] + dx * length, from[1] + dy * length];
 }
@@ -96,7 +102,6 @@ function step(from: Point, degrees: number, length: number): Point {
  * wrong.
  */
 export function solve(frame: Frame): Skeleton {
-  'worklet';
   const neck = step(frame.hip, frame.torso, BONES.torso);
   const head = step(neck, frame.torso, BONES.neck);
 
@@ -137,10 +142,8 @@ export function solve(frame: Frame): Skeleton {
  * point: no combination of inputs can produce a bone of the wrong length.
  */
 export function blend(from: Frame, to: Frame, t: number): Frame {
-  'worklet';
   const mix = (a: number, b: number) => {
-    'worklet';
-    return a + (b - a) * t;
+      return a + (b - a) * t;
   };
 
   return {
@@ -157,7 +160,6 @@ export function blend(from: Frame, to: Frame, t: number): Frame {
 
 /** The body, without the working arm: head, torso, and the near leg. */
 export function bodyPath(s: Skeleton): string {
-  'worklet';
   return (
     `M${r(s.head[0])} ${r(s.head[1])} L${r(s.neck[0])} ${r(s.neck[1])} ` +
     `L${r(s.hip[0])} ${r(s.hip[1])} L${r(s.knee[0])} ${r(s.knee[1])} ` +
@@ -167,7 +169,6 @@ export function bodyPath(s: Skeleton): string {
 
 /** The arm doing the work, drawn separately so it can carry the accent. */
 export function armPath(s: Skeleton): string {
-  'worklet';
   return (
     `M${r(s.shoulder[0])} ${r(s.shoulder[1])} L${r(s.elbow[0])} ${r(s.elbow[1])} ` +
     `L${r(s.hand[0])} ${r(s.hand[1])}`
@@ -176,7 +177,6 @@ export function armPath(s: Skeleton): string {
 
 /** The far arm and leg, drawn behind everything in a dimmer stroke. */
 export function farPath(s: Skeleton): string {
-  'worklet';
   return (
     `M${r(s.hip[0])} ${r(s.hip[1])} L${r(s.farKnee[0])} ${r(s.farKnee[1])} ` +
     `L${r(s.farFoot[0])} ${r(s.farFoot[1])} ` +
@@ -186,6 +186,5 @@ export function farPath(s: Skeleton): string {
 }
 
 function r(value: number): number {
-  'worklet';
   return Math.round(value * 10) / 10;
 }
