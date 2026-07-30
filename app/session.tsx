@@ -14,8 +14,9 @@ import { Divider, Section } from '@/components/Section';
 import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { colors, opacity, spacing } from '@/design-system/tokens';
-import { EXERCISES, exerciseName, findSubstitutions, getExercise, searchExercises } from '@/data/exercises';
+import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
 import type { WorkoutExercise } from '@/domain/types';
+import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { FormGuideSheet } from '@/features/training/FormGuide';
 import { formatPreviousSet, previousPerformance } from '@/features/training/history';
 import { ExerciseRow } from '@/features/training/ExerciseRow';
@@ -63,7 +64,6 @@ export default function SessionScreen() {
   const [substituting, setSubstituting] = useState<WorkoutExercise | null>(null);
   const [guiding, setGuiding] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
-  const [query, setQuery] = useState('');
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
@@ -385,36 +385,11 @@ export default function SessionScreen() {
         ))}
       </BottomSheet>
 
-      <BottomSheet
+      <ExercisePicker
         visible={picking}
-        onClose={() => {
-          setPicking(false);
-          setQuery('');
-        }}
-        title="Add exercise"
-      >
-        <Input value={query} onChangeText={setQuery} placeholder="Search" autoCorrect={false} />
-        <View style={styles.pickerList}>
-          {(query ? searchExercises(query) : EXERCISES).slice(0, 40).map((exercise) => (
-            <Pressable
-              key={exercise.id}
-              onPress={() => {
-                addExerciseToSession(session.id, exercise.id);
-                setPicking(false);
-                setQuery('');
-              }}
-              style={({ pressed }) => [styles.option, pressed && { opacity: opacity.pressed }]}
-            >
-              <View style={styles.optionText}>
-                <Text variant="body">{exercise.name}</Text>
-                <Text variant="caption" tone="tertiary">
-                  {exercise.primaryMuscle}
-                </Text>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      </BottomSheet>
+        onClose={() => setPicking(false)}
+        onPick={(exerciseId) => addExerciseToSession(session.id, exerciseId)}
+      />
 
       <FormGuideSheet exerciseId={guiding} onClose={() => setGuiding(null)} />
 

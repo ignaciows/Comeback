@@ -19,6 +19,7 @@ import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
+import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -43,6 +44,8 @@ export default function GuidedScreen() {
 
   const updateSet = useAppStore((state) => state.updateSet);
   const removeSet = useAppStore((state) => state.removeSet);
+  const addSet = useAppStore((state) => state.addSet);
+  const addExerciseToSession = useAppStore((state) => state.addExerciseToSession);
   const toggleExerciseSkipped = useAppStore((state) => state.toggleExerciseSkipped);
   const pauseSession = useAppStore((state) => state.pauseSession);
   const resumeSession = useAppStore((state) => state.resumeSession);
@@ -53,6 +56,7 @@ export default function GuidedScreen() {
 
   const [restUntil, setRestUntil] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [picking, setPicking] = useState(false);
   const [weight, setWeight] = useState<number | null>(null);
   const [reps, setReps] = useState<number | null>(null);
 
@@ -62,13 +66,21 @@ export default function GuidedScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  /** The first set that has not been done, and the exercise it belongs to. */
+  /**
+   * The first set that has not been done, the exercise it belongs to, and where
+   * that exercise sits among the ones still live — "exercise 2 of 5" is the
+   * question people actually have mid-session, and counting skipped ones would
+   * answer it wrongly.
+   */
   const current = useMemo(() => {
     if (!session) return null;
-    for (const exercise of session.exercises) {
-      if (exercise.skipped) continue;
+    const live = session.exercises.filter((exercise) => !exercise.skipped);
+
+    for (const [position, exercise] of live.entries()) {
       const index = exercise.sets.findIndex((entry) => !entry.completed);
-      if (index >= 0) return { exercise, set: exercise.sets[index], index };
+      if (index >= 0) {
+        return { exercise, set: exercise.sets[index], index, position, total: live.length };
+      }
     }
     return null;
   }, [session]);
@@ -155,12 +167,18 @@ export default function GuidedScreen() {
           <Text variant="body" tone="secondary" style={styles.doneLine}>
             Pick the movements first, then come back here to be walked through them.
           </Text>
-          <PrimaryButton
-            label="Choose exercises"
+          <PrimaryButton label="Add an exercise" onPress={() => setPicking(true)} style={styles.doneCta} />
+          <TextButton
+            label="Use the list view"
             onPress={() => router.replace({ pathname: '/session', params: { id: session.id } })}
-            style={styles.doneCta}
           />
         </View>
+
+        <ExercisePicker
+          visible={picking}
+          onClose={() => setPicking(false)}
+          onPick={(exerciseId) => addExerciseToSession(session.id, exerciseId)}
+        />
       </Screen>
     );
   }
@@ -218,6 +236,13 @@ export default function GuidedScreen() {
     toggleExerciseSkipped(session.id, current.exercise.id);
   };
 
+  // One more set of what you are already doing. It lands after the last one,
+  // so it becomes the next thing the screen puts in front of you.
+  const addAnotherSet = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    addSet(session.id, current.exercise.id, { duplicateLast: true });
+  };
+
   // ---- Resting -------------------------------------------------------------
   if (restLeft !== null) {
     return (
@@ -234,11 +259,31 @@ export default function GuidedScreen() {
           </Text>
 
           <PrimaryButton label="Ready now" onPress={() => setRestUntil(null)} style={styles.doneCta} />
-          <TextButton
-            label="Another minute"
-            onPress={() => setRestUntil((value) => (value ?? Date.now()) + 60_000)}
-            style={styles.restMore}
-          />
+
+          {/* Rest is a suggestion, not a rule. The timer bends both ways. */}
+          <View style={styles.restAdjust}>
+            <TextButton
+              label="−30s"
+              onPress={() => {
+                Haptics.selectionAsync();
+                setRestUntil((value) => Math.max(Date.now(), (value ?? Date.now()) - 30_000));
+              }}
+            />
+            <TextButton
+              label="+30s"
+              onPress={() => {
+                Haptics.selectionAsync();
+                setRestUntil((value) => (value ?? Date.now()) + 30_000);
+              }}
+            />
+            <TextButton
+              label="+2 min"
+              onPress={() => {
+                Haptics.selectionAsync();
+                setRestUntil((value) => (value ?? Date.now()) + 120_000);
+              }}
+            />
+          </View>
         </View>
       </Screen>
     );
@@ -272,7 +317,9 @@ export default function GuidedScreen() {
         <Text variant="title" style={styles.name}>
           {exerciseName(current.exercise.exerciseId)}
         </Text>
-        <Label style={styles.setLabel}>{`Set ${current.index + 1} of ${totalSets}`}</Label>
+        <Label style={styles.setLabel}>
+          {`Exercise ${current.position + 1} of ${current.total} · set ${current.index + 1} of ${totalSets}`}
+        </Label>
 
         {/* One thing to think about. Never a list. */}
         {cue ? (
@@ -303,6 +350,19 @@ export default function GuidedScreen() {
 
         <PrimaryButton label="Done" onPress={logSet} style={styles.log} />
 
+        {/*
+          Everything you can do to the session without leaving it. A guided
+          workout that can only be followed is a workout you abandon the moment
+          the gym does not match the plan — the machine is taken, you have more
+          in you, you want one more movement. All of it writes to the same
+          session as the list view, so none of it is a special guided-mode
+          record: it is just the session, edited.
+        */}
+        <View style={styles.secondary}>
+          <TextButton label="One more set" onPress={addAnotherSet} />
+          <TextButton label="Add exercise" onPress={() => setPicking(true)} />
+        </View>
+
         <View style={styles.secondary}>
           <TextButton label="Skip set" onPress={skipSet} />
           <TextButton label="Skip exercise" onPress={skipExercise} />
@@ -312,6 +372,12 @@ export default function GuidedScreen() {
           />
         </View>
       </Animated.View>
+
+      <ExercisePicker
+        visible={picking}
+        onClose={() => setPicking(false)}
+        onPick={(exerciseId) => addExerciseToSession(session.id, exerciseId)}
+      />
     </Screen>
   );
 }
@@ -550,8 +616,11 @@ const styles = StyleSheet.create({
   restNext: {
     textAlign: 'center',
   },
-  restMore: {
-    marginTop: spacing.sm,
+  restAdjust: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.xl,
+    marginTop: spacing.lg,
   },
   doneTitle: {
     textAlign: 'center',
