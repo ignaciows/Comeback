@@ -20,7 +20,8 @@ export type AnalyticsEvent =
   | { name: 'recommendation_followed'; type: string }
   | { name: 'muscle_focus_set'; count: number }
   | { name: 'proposal_applied'; proposal: string }
-  | { name: 'plan_reconfigured'; reason: string };
+  | { name: 'plan_reconfigured'; reason: string }
+  | { name: 'lesson_completed'; lesson: string };
 
 export interface Analytics {
   track(event: AnalyticsEvent): void;

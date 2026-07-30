@@ -16,7 +16,7 @@ import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/t
 import { cuesFor } from '@/data/coachingCues';
 import { exerciseName, getExercise } from '@/data/exercises';
 import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
-import { formatClock, sessionProgress } from '@/domain/training/sessionProgress';
+import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
 import { useSession } from '@/store/hooks';
@@ -136,6 +136,30 @@ export default function GuidedScreen() {
             No session running.
           </Text>
           <TextButton label="Back" onPress={() => router.back()} />
+        </View>
+      </Screen>
+    );
+  }
+
+  // ---- Nothing laid out at all --------------------------------------------
+  // A free session starts empty, and "no sets left" is not the same thing as
+  // "you finished": congratulating someone who has not lifted anything is
+  // worse than useless, and there is nothing here to save.
+  if (sessionStage(progress) === 'empty') {
+    return (
+      <Screen scroll={false}>
+        <View style={styles.centre}>
+          <Text variant="display" style={styles.doneTitle}>
+            Nothing in this session yet
+          </Text>
+          <Text variant="body" tone="secondary" style={styles.doneLine}>
+            Pick the movements first, then come back here to be walked through them.
+          </Text>
+          <PrimaryButton
+            label="Choose exercises"
+            onPress={() => router.replace({ pathname: '/session', params: { id: session.id } })}
+            style={styles.doneCta}
+          />
         </View>
       </Screen>
     );

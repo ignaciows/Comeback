@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describePause, formatClock, sessionProgress } from '@/domain/training/sessionProgress';
+import { describePause, formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import { buildPhases } from '@/domain/plan/phases';
 import type { SessionPause, WorkoutSession } from '@/domain/types';
 
@@ -193,5 +193,29 @@ describe('phases of the plan', () => {
     });
 
     expect(phases[0].story).toMatch(/scale is the wrong thing/i);
+  });
+});
+
+describe('telling an empty session from a finished one', () => {
+  it('calls a session with nothing laid out empty, not complete', () => {
+    // A free session starts with no exercises. Congratulating someone who has
+    // not lifted anything — and offering to save it — is the bug this guards.
+    const progress = sessionProgress(session({ exercises: [] }));
+
+    expect(progress.setsPlanned).toBe(0);
+    expect(sessionStage(progress)).toBe('empty');
+  });
+
+  it('calls it complete only once every laid-out set is done', () => {
+    expect(sessionStage(sessionProgress(session({ exercises: [{ sets: 3, done: 1 }] })))).toBe('working');
+    expect(sessionStage(sessionProgress(session({ exercises: [{ sets: 3, done: 3 }] })))).toBe('complete');
+  });
+
+  it('ignores skipped exercises when deciding, so skipping the rest finishes the session', () => {
+    const progress = sessionProgress(
+      session({ exercises: [{ sets: 2, done: 2 }, { sets: 3, done: 0, skipped: true }] }),
+    );
+
+    expect(sessionStage(progress)).toBe('complete');
   });
 });

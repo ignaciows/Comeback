@@ -13,6 +13,7 @@ import type { VerdictAction } from '@/domain/plan/verdict';
 import { getRoute, type FollowedRoute, type PlanRoute } from '@/domain/plan/routes';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
+import type { LessonRecord } from '@/domain/learning';
 import { adaptSetCount } from '@/domain/training/adaptation';
 import { applyEmphasis } from '@/domain/training/volume';
 import type {
@@ -135,6 +136,8 @@ export type AppState = {
   planRoute: (FollowedRoute & { startedAt: ISODate }) | null;
   /** Suggestion ids already applied or dismissed, so they stop coming back. */
   appliedProposals: string[];
+  /** Lessons read, in the order they were read. Never expires, never resets. */
+  lessons: LessonRecord[];
 };
 
 type Actions = {
@@ -230,6 +233,8 @@ type Actions = {
   /** Applies a change the app worked out on its own. */
   applyProposal: (proposal: Proposal) => void;
   dismissProposal: (id: string) => void;
+  /** Marks a lesson read. Reading it twice does not create a second record. */
+  completeLesson: (lessonId: string, gotItFirstTry: boolean) => void;
   persistBaseline: (baseline: ComebackBaseline) => void;
   seedDeveloperProfile: () => void;
   resetAll: () => void;
@@ -238,7 +243,7 @@ type Actions = {
 export type Store = AppState & Actions;
 
 const initialState: AppState = {
-  schemaVersion: 7,
+  schemaVersion: 8,
   hydrated: false,
   onboardingCompleted: false,
   profile: null,
@@ -258,6 +263,7 @@ const initialState: AppState = {
   phases: [],
   planRoute: null,
   appliedProposals: [],
+  lessons: [],
 };
 
 /** Last completed working set for an exercise — drives the suggested values. */
@@ -1486,6 +1492,17 @@ export const useAppStore = create<Store>()(
       dismissProposal: (id) =>
         set((state) => ({ appliedProposals: [...state.appliedProposals, id] })),
 
+      completeLesson: (lessonId, gotItFirstTry) =>
+        set((state) => {
+          // Re-reading a lesson is normal and must not stack up records, or
+          // the "12 of 12" count would drift past the number of lessons.
+          if (state.lessons.some((entry) => entry.lessonId === lessonId)) return state;
+          track({ name: 'lesson_completed', lesson: lessonId });
+          return {
+            lessons: [...state.lessons, { lessonId, completedOn: todayOf(), gotItFirstTry }],
+          };
+        }),
+
       persistBaseline: (baseline) => set({ comebackBaseline: baseline }),
 
       /**
@@ -1605,7 +1622,7 @@ export const useAppStore = create<Store>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => asyncStorageAdapter),
-      version: 7,
+      version: 8,
       /**
        * State written by an older build is missing the fields added since, and
        * a screen reading `STRATEGIES[goal.strategy]` on an undefined strategy
@@ -1626,8 +1643,10 @@ export const useAppStore = create<Store>()(
         const repair = (value: Partial<AppState>): AppState =>
           ({
             ...value,
-            schemaVersion: 7,
+            schemaVersion: 8,
             appliedProposals: value.appliedProposals ?? [],
+            // v8 added the learning section.
+            lessons: value.lessons ?? [],
             training: {
               ...DEFAULT_TRAINING,
               ...value.training,

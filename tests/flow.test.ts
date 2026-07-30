@@ -52,11 +52,21 @@ const onboarding = {
 
 describe('main flow', () => {
   beforeEach(() => {
+    // Any test that pins the clock must not leak that into the next one.
+    vi.useRealTimers();
     memory.clear();
     useAppStore.getState().resetAll();
   });
 
   it('carries a user from onboarding to a logged session and an updated momentum score', async () => {
+    // The recommendation is weekday-dependent: on a day outside
+    // `preferredWeekdays` it correctly says "rest" and names no routine day,
+    // so starting it yields an empty free session and this walk-through
+    // asserts nothing. Pin the clock to a Wednesday — a training day in the
+    // fixture — so the suite exercises the same path whatever day it runs on.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-07-29T10:00:00.000Z'));
+
     const store = useAppStore.getState();
 
     // 1. Onboarding creates the profile, goal, routine and schedule.
@@ -635,6 +645,8 @@ describe('main flow', () => {
     // written before that field existed must not come back undefined — and
     // backfilling it must not overwrite what the user had already set.
     expect(state.training.guided).toBe(true);
+    // v8 added the learning section; the Learn tab reads this list on mount.
+    expect(state.lessons).toEqual([]);
     expect(state.training.preferredDaysPerWeek).toBe(5);
     expect(state.training.preferredWeekdays).toEqual([1, 2, 3, 5, 6]);
     // And every reader of a session copes with it.

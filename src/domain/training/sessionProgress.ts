@@ -33,6 +33,21 @@ export type SessionProgress = {
   isPaused: boolean;
 };
 
+/**
+ * Where a session stands, as three cases a screen has to tell apart.
+ *
+ * `empty` and `complete` both mean "no set is waiting for you", and treating
+ * them as one thing is how a free session that nobody has filled in yet ends up
+ * being congratulated for finishing. They are not the same: one needs
+ * exercises, the other needs saving.
+ */
+export type SessionStage = 'empty' | 'working' | 'complete';
+
+export function sessionStage(progress: SessionProgress): SessionStage {
+  if (progress.setsPlanned === 0) return 'empty';
+  return progress.setsDone >= progress.setsPlanned ? 'complete' : 'working';
+}
+
 export function sessionProgress(session: WorkoutSession, now: Date = new Date()): SessionProgress {
   const end = session.endedAt ? new Date(session.endedAt).getTime() : now.getTime();
   const start = new Date(session.startedAt).getTime();

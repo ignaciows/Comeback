@@ -219,65 +219,84 @@ export default function PlanTab() {
         </Section>
       </Reveal>
 
-      <Reveal index={7}>
-        <NavGroup style={styles.group}>
-          {routeProgress?.nextBlock ? (
+      {/* Anything that needs attention, and only that. */}
+      {routeProgress?.nextBlock || drift ? (
+        <Reveal index={7}>
+          <NavGroup style={styles.group}>
+            {routeProgress?.nextBlock ? (
+              <NavRow
+                label={`Start the ${routeProgress.nextBlock.label.toLowerCase()}`}
+                detail={routeProgress.routeName}
+                tone="accent"
+                dot
+                onPress={() => router.push('/routes')}
+              />
+            ) : null}
+            {drift ? (
+              <NavRow
+                label={drift.headline}
+                detail={drift.detail}
+                tone={drift.days > 0 ? 'warning' : 'accent'}
+                dot
+                onPress={() => router.push('/why')}
+              />
+            ) : null}
+          </NavGroup>
+        </Reveal>
+      ) : null}
+
+      {/*
+        Two groups, because a flat list of ten identical rows is how a screen
+        stops being navigable. Changing the plan and inspecting it are different
+        intentions, and the sections above already own their own destinations —
+        muscle focus and the journal are reachable by tapping the very things
+        that display them, so repeating them down here was three routes to the
+        same place and no clue which one to take.
+      */}
+      <Reveal index={8}>
+        <Section title="Change it">
+          <NavGroup style={styles.group}>
+            <NavRow label="Change the plan" icon="target" onPress={() => router.push('/adjust')} />
+            <NavRow label="Build your own" icon="edit" detail="Drag the blocks" onPress={() => router.push('/builder')} />
+            {routeProgress?.nextBlock ? null : (
+              <NavRow
+                label="Named plans"
+                icon="progress"
+                detail={routeProgress?.routeName ?? 'Bulk then cut, lean, recomp'}
+                onPress={() => router.push('/routes')}
+              />
+            )}
+          </NavGroup>
+        </Section>
+      </Reveal>
+
+      <Reveal index={9}>
+        <Section title="Look closer">
+          <NavGroup style={styles.group}>
             <NavRow
-              label={`Start the ${routeProgress.nextBlock.label.toLowerCase()}`}
-              detail={routeProgress.routeName}
-              tone="accent"
-              dot
-              onPress={() => router.push('/routes')}
+              label="Routine"
+              icon="train"
+              value={routine ? `${routine.daysPerWeek} days` : '—'}
+              detail={routine?.name}
+              onPress={() => router.push('/routine')}
             />
-          ) : null}
-          {drift ? (
+            <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
             <NavRow
-              label={drift.headline}
-              detail={drift.detail}
-              tone={drift.days > 0 ? 'warning' : 'accent'}
-              dot
-              onPress={() => router.push('/why')}
+              label="Your body"
+              icon="body"
+              detail="Now, and at the end of each phase"
+              onPress={() => router.push('/body-shape')}
             />
-          ) : null}
-          <NavRow label="Change the plan" icon="target" onPress={() => router.push('/adjust')} />
-          <NavRow label="Build your own" icon="edit" detail="Drag the blocks" onPress={() => router.push('/builder')} />
-          <NavRow
-            label="Named plans"
-            icon="progress"
-            detail={routeProgress?.routeName ?? 'Bulk then cut, lean, recomp'}
-            onPress={() => router.push('/routes')}
-          />
-          <NavRow
-            label="Muscle focus"
-            icon="body"
-            value={focus.length > 0 ? `${focus.length}` : undefined}
-            detail={focus.length === 0 ? 'Balanced' : focus.map((muscle) => MUSCLE_GROUP_LABELS[muscle]).join(', ')}
-            onPress={() => router.push('/focus')}
-          />
-          <NavRow
-            label="Routine"
-            icon="train"
-            value={routine ? `${routine.daysPerWeek} days` : '—'}
-            detail={routine?.name}
-            onPress={() => router.push('/routine')}
-          />
-          <NavRow
-            label="What the app worked out"
-            icon="bolt"
-            value={engine.proposals.length > 0 ? `${engine.proposals.length}` : undefined}
-            tone={engine.proposals.length > 0 ? 'accent' : 'neutral'}
-            dot={engine.proposals.length > 0}
-            onPress={() => router.push('/knows')}
-          />
-          <NavRow
-            label="Your body"
-            icon="body"
-            detail="Now, and at the end of each phase"
-            onPress={() => router.push('/body-shape')}
-          />
-          <NavRow label="Journal" icon="journal" onPress={() => router.push('/journal')} />
-          <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
-        </NavGroup>
+            <NavRow
+              label="What the app worked out"
+              icon="bolt"
+              value={engine.proposals.length > 0 ? `${engine.proposals.length}` : undefined}
+              tone={engine.proposals.length > 0 ? 'accent' : 'neutral'}
+              dot={engine.proposals.length > 0}
+              onPress={() => router.push('/knows')}
+            />
+          </NavGroup>
+        </Section>
       </Reveal>
     </Screen>
   );
