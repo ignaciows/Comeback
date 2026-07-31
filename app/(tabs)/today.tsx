@@ -15,9 +15,11 @@ import { momentumStateLabel } from '@/domain/momentum/calculateMomentum';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { readinessLabel } from '@/domain/readiness/calculateReadiness';
 import { track } from '@/services/analytics/analytics';
+import { replanWeek } from '@/domain/plan/week';
+import { WeekStrip } from '@/features/plan/WeekStrip';
 import { useActiveSession, useEngine, useNextStep, useTodayCheckin } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
-import { addDays, formatLongDate, greetingFor, today as todayOf } from '@/utils/date';
+import { addDays, formatLongDate, greetingFor, startOfWeek, today as todayOf } from '@/utils/date';
 
 /**
  * Today answers one question — what do I do now — and nothing else appears
@@ -42,8 +44,27 @@ export default function TodayScreen() {
   const { setup } = useNextStep();
   // Guided runs the session one set at a time; the choice lives on the Train tab.
   const sessionScreen = useAppStore((state) => (state.training.guided ? '/guided' : '/session'));
+  const training = useAppStore((state) => state.training);
+  const routines = useAppStore((state) => state.routines);
+  const activeRoutineId = useAppStore((state) => state.activeRoutineId);
+  const allSessions = useAppStore((state) => state.sessions);
+  const weekStartsOn = useAppStore((state) => state.preferences.weekStartsOn);
 
   const date = todayOf();
+
+  // The week, rearranged around whatever has actually happened in it.
+  const routine = routines.find((entry) => entry.id === activeRoutineId) ?? routines[0] ?? null;
+  const weekStart = startOfWeek(date, weekStartsOn);
+  const weekPlan = replanWeek({
+    today: date,
+    weekStart,
+    target: training.preferredDaysPerWeek,
+    completedDates: allSessions
+      .filter((entry) => entry.status === 'completed' && entry.date >= weekStart)
+      .map((entry) => entry.date),
+    preferredWeekdays: training.preferredWeekdays,
+    routineDayIds: routine?.days.map((day) => day.id) ?? [],
+  });
   const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
   // At most one suggestion here; the rest wait on their own screen.
   const openProposal = engine.proposals.find((entry) => !applied.includes(entry.id)) ?? null;
@@ -144,7 +165,13 @@ export default function TodayScreen() {
         </View>
       </Reveal>
 
-      <Reveal index={2}>
+      {/* Where the week stands, and what the plan has done about the days
+          that did not happen. Tapping it opens the whole road. */}
+      <Reveal index={setup.length > 0 ? 3 : 2}>
+        <WeekStrip plan={weekPlan} onPress={() => router.push('/roadmap')} style={styles.week} />
+      </Reveal>
+
+      <Reveal index={setup.length > 0 ? 4 : 3}>
         <NavGroup style={styles.group}>
           <NavRow
             label="Why this session"
@@ -281,6 +308,9 @@ const styles = StyleSheet.create({
   skip: {
     alignSelf: 'center',
     marginTop: spacing.sm,
+  },
+  week: {
+    marginBottom: spacing.xl,
   },
   group: {
     marginTop: spacing.xl,
