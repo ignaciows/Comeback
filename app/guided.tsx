@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle } from 'react-native-reanimated';
 
-import { PrimaryButton, TextButton } from '@/components/Button';
+import { PrimaryButton, SecondaryButton, TextButton } from '@/components/Button';
 import { StatusPill } from '@/components/Feedback';
 import { AnimatedNumber } from '@/components/motion/AnimatedNumber';
 import { Screen } from '@/components/Screen';
@@ -19,7 +19,7 @@ import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
-import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
+import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { Stepper } from '@/features/training/Stepper';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -50,6 +50,7 @@ export default function GuidedScreen() {
   const addSet = useAppStore((state) => state.addSet);
   const addExerciseToSession = useAppStore((state) => state.addExerciseToSession);
   const substituteExercise = useAppStore((state) => state.substituteExercise);
+  const updateRoutineExercise = useAppStore((state) => state.updateRoutineExercise);
   const gyms = useAppStore((state) => state.gyms);
   const gymId = useAppStore((state) => state.training.gymId);
   const toggleExerciseSkipped = useAppStore((state) => state.toggleExerciseSkipped);
@@ -66,6 +67,7 @@ export default function GuidedScreen() {
   const [now, setNow] = useState(Date.now());
   const [picking, setPicking] = useState(false);
   const [swapping, setSwapping] = useState(false);
+  const [chosenSwap, setChosenSwap] = useState<string | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
   const [reps, setReps] = useState<number | null>(null);
 
@@ -348,10 +350,9 @@ export default function GuidedScreen() {
           accessibilityLabel={`How to do ${exerciseName(current.exercise.exerciseId)}`}
           style={({ pressed }) => [styles.animation, pressed && { opacity: opacity.pressed }]}
         >
-          <ExerciseAnimation
+          <ExerciseStages
             pattern={meta?.pattern ?? 'isolation'}
             equipment={meta?.equipment ?? []}
-            size={190}
           />
         </Pressable>
 
@@ -435,35 +436,91 @@ export default function GuidedScreen() {
 
       {/* Swaps that work the same muscle, with anything your gym does not have
           marked as such rather than quietly offered. */}
+      {/*
+        The most common reason a session gets abandoned: the machine is taken,
+        or the gym never had it. Two answers, because they are different
+        problems — a queue is today's problem, a gym that does not own the
+        thing is every week's, and making someone re-swap every session until
+        they give up is how a plan quietly dies.
+      */}
       <BottomSheet
         visible={swapping}
-        onClose={() => setSwapping(false)}
-        title="Use something else"
-        subtitle={`Instead of ${exerciseName(current.exercise.exerciseId)}`}
+        onClose={() => {
+          setSwapping(false);
+          setChosenSwap(null);
+        }}
+        title={chosenSwap ? 'For how long?' : 'Use something else'}
+        subtitle={
+          chosenSwap
+            ? `${exerciseName(current.exercise.exerciseId)} → ${exerciseName(chosenSwap)}`
+            : `Instead of ${exerciseName(current.exercise.exerciseId)}`
+        }
       >
-        {findSubstitutions(current.exercise.exerciseId, equipment).map((option) => (
-          <Pressable
-            key={option.exercise.id}
-            onPress={() => {
-              Haptics.selectionAsync();
-              substituteExercise(session.id, current.exercise.id, option.exercise.id);
-              setSwapping(false);
-            }}
-            accessibilityRole="button"
-            accessibilityLabel={option.exercise.name}
-            style={({ pressed }) => [styles.swap, pressed && { opacity: opacity.pressed }]}
-          >
-            <View style={styles.swapText}>
-              <Text variant="body">{option.exercise.name}</Text>
-              <Text variant="caption" tone="tertiary">
-                {option.availableHere ? option.reason : `${option.reason} · not in your gym`}
-              </Text>
-            </View>
-            {option.availableHere ? (
-              <Icon name="check" size={14} color={colors.accent} />
-            ) : null}
-          </Pressable>
-        ))}
+        {chosenSwap ? (
+          <View style={styles.swapChoice}>
+            <PrimaryButton
+              label="Just for today"
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                substituteExercise(session.id, current.exercise.id, chosenSwap);
+                setSwapping(false);
+                setChosenSwap(null);
+              }}
+            />
+            <Text variant="caption" tone="tertiary" style={styles.swapNote}>
+              This session only. Next time the plan asks for the original again.
+            </Text>
+
+            <SecondaryButton
+              label="Change it in my plan"
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                substituteExercise(session.id, current.exercise.id, chosenSwap);
+
+                // The routine is what next week is built from, so a permanent
+                // swap has to land there and not only on today's session.
+                const routine = routines.find((entry) => entry.id === session.routineId);
+                const day = routine?.days.find((entry) => entry.id === session.routineDayId);
+                const planned = day?.exercises.find(
+                  (entry) => entry.exerciseId === current.exercise.exerciseId,
+                );
+                if (day && planned) {
+                  updateRoutineExercise(day.id, planned.id, { exerciseId: chosenSwap });
+                }
+
+                setSwapping(false);
+                setChosenSwap(null);
+              }}
+              style={styles.swapForever}
+            />
+            <Text variant="caption" tone="tertiary" style={styles.swapNote}>
+              From now on. Your history on the old movement stays where it is.
+            </Text>
+
+            <TextButton label="Back" onPress={() => setChosenSwap(null)} style={styles.swapBack} />
+          </View>
+        ) : (
+          findSubstitutions(current.exercise.exerciseId, equipment).map((option) => (
+            <Pressable
+              key={option.exercise.id}
+              onPress={() => {
+                Haptics.selectionAsync();
+                setChosenSwap(option.exercise.id);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={option.exercise.name}
+              style={({ pressed }) => [styles.swap, pressed && { opacity: opacity.pressed }]}
+            >
+              <View style={styles.swapText}>
+                <Text variant="body">{option.exercise.name}</Text>
+                <Text variant="caption" tone="tertiary">
+                  {option.availableHere ? option.reason : `${option.reason} · not in your gym`}
+                </Text>
+              </View>
+              {option.availableHere ? <Icon name="check" size={14} color={colors.accent} /> : null}
+            </Pressable>
+          ))
+        )}
       </BottomSheet>
     </Screen>
   );
@@ -584,6 +641,20 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderRadius: radius.md,
     backgroundColor: colors.surface,
+  },
+  swapChoice: {
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  swapNote: {
+    marginBottom: spacing.lg,
+  },
+  swapForever: {
+    marginTop: spacing.sm,
+  },
+  swapBack: {
+    alignSelf: 'center',
+    marginTop: spacing.md,
   },
   swapText: {
     flex: 1,

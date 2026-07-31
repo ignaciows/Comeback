@@ -14,7 +14,7 @@ import { motion } from '@/design-system/motion';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { exerciseName, getExercise } from '@/data/exercises';
 import { ASSESSMENT, summarise, type RepOut } from '@/domain/training/assessment';
-import { ExerciseAnimation } from '@/features/training/ExerciseAnimation';
+import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { Stepper } from '@/features/training/Stepper';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -122,10 +122,9 @@ export default function AssessmentScreen() {
       </View>
 
       <Animated.View key={item!.exerciseId} entering={FadeIn.duration(motion.duration.base)}>
-        <ExerciseAnimation
+        <ExerciseStages
           pattern={meta?.pattern ?? 'isolation'}
           equipment={meta?.equipment ?? []}
-          size={170}
           style={styles.animation}
         />
 

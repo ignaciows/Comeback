@@ -29,6 +29,11 @@ export type Movement = {
   hold?: boolean;
   station: 'floor' | 'bench' | 'rack' | 'cable' | 'machine' | 'bar_overhead';
   implement: 'bar' | 'dumbbell' | 'handle' | 'none';
+  /**
+   * Where the weight sits. A back squat carries the bar on the shoulders, and
+   * drawing it in the hands puts it floating in mid-air beside the figure.
+   */
+  holdAt?: 'hands' | 'shoulders';
 };
 
 /** Standing upright: a small knee bend so the legs read as legs. */
@@ -44,8 +49,8 @@ const standing = {
 export const MOVEMENTS: Record<MovementPattern, Movement> = {
   // Lying on a bench, head to the left, pressing straight up.
   horizontal_push: {
-    from: { hip: [58, 56], torso: 264, shoulder: 214, elbow: 88, thigh: 34, knee: -104, spreadLeg: 16, spreadArm: -22 },
-    to: { hip: [58, 56], torso: 264, shoulder: 176, elbow: 6, thigh: 34, knee: -104, spreadLeg: 16, spreadArm: -10 },
+    from: { hip: [62, 62], torso: 272, shoulder: 206, elbow: 84, thigh: 40, knee: -112, spreadLeg: 14, spreadArm: -20 },
+    to: { hip: [62, 62], torso: 272, shoulder: 178, elbow: 4, thigh: 40, knee: -112, spreadLeg: 14, spreadArm: -8 },
     tempo: 2600,
     station: 'bench',
     implement: 'bar',
@@ -80,11 +85,12 @@ export const MOVEMENTS: Record<MovementPattern, Movement> = {
 
   // Bar on the back. Hips travel back and down, torso leans with them.
   squat: {
-    from: { hip: [50, 62], torso: 202, shoulder: 226, elbow: 76, thigh: 42, knee: -104, spreadLeg: -14, spreadArm: -16 },
+    from: { hip: [52, 64], torso: 194, shoulder: 214, elbow: 68, thigh: 52, knee: -118, spreadLeg: -12, spreadArm: -14 },
     to: { hip: [50, 44], torso: 184, shoulder: 200, elbow: 74, thigh: 4, knee: -12, spreadLeg: -10, spreadArm: -16 },
     tempo: 3000,
     station: 'rack',
     implement: 'bar',
+    holdAt: 'shoulders',
   },
 
   // Hips back, bar tracking the legs, back flat throughout.
@@ -116,8 +122,8 @@ export const MOVEMENTS: Record<MovementPattern, Movement> = {
 
   // Loaded carry: upright, arms hanging, mid-stride.
   carry: {
-    from: { ...standing, shoulder: 6, elbow: 4, thigh: 22, knee: -26, spreadLeg: -42 },
-    to: { ...standing, shoulder: 6, elbow: 4, thigh: -18, knee: -8, spreadLeg: 42 },
+    from: { ...standing, shoulder: 4, elbow: 3, thigh: 30, knee: -34, spreadLeg: -62 },
+    to: { ...standing, shoulder: 4, elbow: 3, thigh: -26, knee: -6, spreadLeg: 62 },
     tempo: 1600,
     station: 'floor',
     implement: 'dumbbell',
