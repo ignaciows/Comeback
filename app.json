@@ -13,7 +13,7 @@
     "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0B0D",
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "fingerprint"
     },
     "ios": {
       "supportsTablet": false,
@@ -67,6 +67,12 @@
         "projectId": "1aa87774-5b7c-40fd-b20a-eb0380f45c7f"
       }
     },
-    "owner": "parkyparking"
+    "owner": "parkyparking",
+    "updates": {
+      "url": "https://u.expo.dev/1aa87774-5b7c-40fd-b20a-eb0380f45c7f",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 10000
+    }
   }
 }
