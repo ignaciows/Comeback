@@ -1,3 +1,4 @@
+import type { SleepNight } from '@/domain/sleep/sleepStats';
 import type { BodyMeasurement, DailyCheckin, DataSource, ISODate } from '@/domain/types';
 import { addDays, today as todayOf } from '@/utils/date';
 import type { HealthDataProvider } from './HealthDataProvider';
@@ -18,6 +19,13 @@ export type SyncResult = {
   weights: BodyMeasurement[];
   /** Only the sleep field is filled; the rest of the check-in stays the user's. */
   sleep: { date: ISODate; hours: number }[];
+  /**
+   * The full nights, stages included, kept separately from the check-in.
+   * A check-in only has room for a number of hours, and the stage split is
+   * what makes a quality estimate possible at all — folding it away would
+   * throw out the most useful part of what the Watch measured.
+   */
+  nights: SleepNight[];
   /** Daily totals from MIKUY's meals, read back through Health. */
   nutrition: NutritionDay[];
   imported: number;
@@ -114,9 +122,19 @@ export async function syncHealthData({
       source: sample.source,
     }));
 
+  // Kept whole and unconditionally: unlike the check-in field, this is not
+  // competing with anything the user typed, so there is nothing to defend.
+  const nights: SleepNight[] = sleep.map((sample) => ({
+    date: sample.date,
+    hours: sample.hours,
+    stages: sample.stages,
+    awakeMin: sample.awakeMin,
+  }));
+
   return {
     weights,
     sleep: sleepUpdates,
+    nights,
     nutrition,
     imported: weights.length + sleepUpdates.length + nutrition.length,
     skipped,

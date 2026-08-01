@@ -18,7 +18,7 @@ import { readinessLabel } from '@/domain/readiness/calculateReadiness';
 import { track } from '@/services/analytics/analytics';
 import { replanWeek } from '@/domain/plan/week';
 import { WeekStrip } from '@/features/plan/WeekStrip';
-import { useActiveSession, useEngine, useNextStep, useTodayCheckin } from '@/store/hooks';
+import { useActiveSession, useEngine, useNextStep, useSleepStats, useTodayCheckin } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 import { addDays, formatLongDate, greetingFor, startOfWeek, today as todayOf } from '@/utils/date';
 
@@ -32,6 +32,7 @@ export default function TodayScreen() {
   const engine = useEngine();
   const checkin = useTodayCheckin();
   const activeSession = useActiveSession();
+  const sleep = useSleepStats(14);
 
   const profile = useAppStore((state) => state.profile);
   const goal = useAppStore((state) => state.goal);
@@ -225,6 +226,13 @@ export default function TodayScreen() {
               track({ name: 'momentum_viewed', state: momentum?.state ?? 'unknown' });
               router.push('/momentum');
             }}
+          />
+          <NavRow
+            label="Sleep"
+            icon="sleep"
+            value={sleep.averageHours === null ? '—' : `${sleep.averageHours}h`}
+            detail={sleep.nights === 0 ? 'Connect Apple Health' : `${sleep.nights}-night average`}
+            onPress={() => router.push('/sleep')}
           />
           <NavRow
             label="Fuel"

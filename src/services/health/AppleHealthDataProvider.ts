@@ -10,7 +10,7 @@ import {
   type SleepSample,
   type WorkoutSample,
 } from './HealthDataProvider';
-import { ASLEEP_VALUES, NO_LIMIT, READ_TYPES, UNITS, isHealthKitLinked, loadHealthKit } from './native/appleHealth';
+import { NO_LIMIT, READ_TYPES, SLEEP_VALUE, UNITS, isHealthKitLinked, loadHealthKit } from './native/appleHealth';
 
 /**
  * Apple Health, behind the same interface as manual entry.
@@ -95,25 +95,56 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
           limit: NO_LIMIT,
         });
 
-        // Only states that mean actually asleep; "in bed" and "awake" both
-        // overstate the night.
-        const asleep = samples.filter((sample) => ASLEEP_VALUES.has(sample.value));
+        type Night = { asleepMin: number; deepMin: number; remMin: number; coreMin: number; awakeMin: number };
+        const nights = new Map<ISODate, Night>();
+        const blank = (): Night => ({ asleepMin: 0, deepMin: 0, remMin: 0, coreMin: 0, awakeMin: 0 });
 
-        const hoursByDay = new Map<ISODate, number>();
-        for (const sample of asleep) {
-          const hours = (sample.endDate.getTime() - sample.startDate.getTime()) / 3_600_000;
-          // Attributed to the day you woke up, so a night that crosses midnight
+        for (const sample of samples) {
+          // "In bed" overlaps the asleep samples, so counting it would double
+          // the night. It is dropped rather than added anywhere.
+          if (sample.value === SLEEP_VALUE.inBed) continue;
+
+          const minutes = (sample.endDate.getTime() - sample.startDate.getTime()) / 60_000;
+          if (!Number.isFinite(minutes) || minutes <= 0) continue;
+
+          // Attributed to the day you woke up, so a night crossing midnight
           // counts once, against the morning it belongs to.
           const date = toDate(sample.endDate);
-          hoursByDay.set(date, (hoursByDay.get(date) ?? 0) + hours);
+          const night = nights.get(date) ?? blank();
+
+          if (sample.value === SLEEP_VALUE.awake) {
+            night.awakeMin += minutes;
+          } else {
+            night.asleepMin += minutes;
+            if (sample.value === SLEEP_VALUE.deep) night.deepMin += minutes;
+            else if (sample.value === SLEEP_VALUE.rem) night.remMin += minutes;
+            else if (sample.value === SLEEP_VALUE.core) night.coreMin += minutes;
+          }
+          nights.set(date, night);
         }
 
-        return [...hoursByDay.entries()].map(([date, hours]) => ({
-          date,
-          hours: round(hours, 1),
-          quality: null,
-          source: 'apple_watch' as const,
-        }));
+        return [...nights.entries()]
+          .filter(([, night]) => night.asleepMin > 0)
+          .map(([date, night]) => {
+            // Only claim stages when the source actually broke them down; an
+            // older watch reports `asleepUnspecified` for the whole night.
+            const staged = night.deepMin + night.remMin + night.coreMin > 0;
+            return {
+              date,
+              hours: round(night.asleepMin / 60, 1),
+              // Quality is derived downstream, where the stage model lives.
+              quality: null,
+              stages: staged
+                ? {
+                    deepMin: Math.round(night.deepMin),
+                    remMin: Math.round(night.remMin),
+                    coreMin: Math.round(night.coreMin),
+                  }
+                : null,
+              awakeMin: Math.round(night.awakeMin),
+              source: 'apple_watch' as const,
+            };
+          });
       }, []);
     },
 

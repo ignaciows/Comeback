@@ -4,6 +4,7 @@ import { runEngine, type EngineResult } from '@/domain/engine';
 import type { WorkoutSession } from '@/domain/types';
 import { today as todayOf } from '@/utils/date';
 import { deriveSetupSteps, deriveTodayStep, setupProgress } from '@/domain/nextStep';
+import { sleepStats, type SleepNight, type SleepStats } from '@/domain/sleep/sleepStats';
 import { useAppStore } from './useAppStore';
 
 /**
@@ -197,4 +198,41 @@ export function useNextStep() {
     assessment,
     activeSessionId,
   ]);
+}
+
+/**
+ * Every night the app knows about, from both sources at once.
+ *
+ * Apple Health carries the stage split and wins where it exists; a check-in
+ * the user typed only has hours, and fills the nights Health has nothing for.
+ * Merging here rather than in the store keeps the imported data untouched, so
+ * a night stays correctable and its real source stays visible.
+ */
+export function useSleepNights(): SleepNight[] {
+  const sleepLog = useAppStore((state) => state.sleepLog);
+  const checkins = useAppStore((state) => state.checkins);
+
+  return useMemo(() => {
+    const byDate = new Map<string, SleepNight>();
+
+    for (const checkin of checkins) {
+      if (checkin.sleepHours === null) continue;
+      byDate.set(checkin.date, {
+        date: checkin.date,
+        hours: checkin.sleepHours,
+        stages: null,
+        awakeMin: null,
+      });
+    }
+    // Second, so a measured night replaces a typed one for the same date.
+    for (const night of sleepLog) byDate.set(night.date, night);
+
+    return [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+  }, [sleepLog, checkins]);
+}
+
+export function useSleepStats(windowDays = 14): SleepStats {
+  const nights = useSleepNights();
+  const date = todayOf();
+  return useMemo(() => sleepStats(nights, date, windowDays), [nights, date, windowDays]);
 }

@@ -45,6 +45,7 @@ import type {
   WorkoutSet,
 } from '@/domain/types';
 import type { NutritionDay } from '@/services/health/sync';
+import type { SleepNight } from '@/domain/sleep/sleepStats';
 import type { WeatherSnapshot } from '@/domain/nudges/nudges';
 import { track } from '@/services/analytics/analytics';
 import { asyncStorageAdapter, STORAGE_KEY } from '@/services/storage/adapter';
@@ -200,6 +201,8 @@ export type AppState = {
   bodyMeasurements: BodyMeasurement[];
   /** Daily totals imported from MIKUY through Apple Health. */
   nutritionLog: NutritionDay[];
+  /** Nights imported from Apple Health, stages included. */
+  sleepLog: SleepNight[];
   /** Habit ids the user switched on. */
   enabledHabits: string[];
   /**
@@ -318,6 +321,7 @@ type Actions = {
     weights: BodyMeasurement[];
     sleep: { date: ISODate; hours: number }[];
     nutrition?: NutritionDay[];
+    nights?: SleepNight[];
   }) => void;
   /** Switches a habit on or off. */
   toggleHabit: (habitId: string) => void;
@@ -367,6 +371,7 @@ const initialState: AppState = {
   checkins: [],
   bodyMeasurements: [],
   nutritionLog: [],
+  sleepLog: [],
   enabledHabits: [],
   weatherEnabled: false,
   weather: null,
@@ -1441,7 +1446,7 @@ export const useAppStore = create<Store>()(
         });
       },
 
-      applyHealthSync: ({ weights, sleep, nutrition = [] }) => {
+      applyHealthSync: ({ weights, sleep, nutrition = [], nights = [] }) => {
         const timestamp = nowISO();
         set((state) => {
           const byDate = new Map(state.bodyMeasurements.map((entry) => [entry.date, entry]));
@@ -1481,10 +1486,15 @@ export const useAppStore = create<Store>()(
           const nutritionByDate = new Map(state.nutritionLog.map((entry) => [entry.date, entry]));
           for (const entry of nutrition) nutritionByDate.set(entry.date, entry);
 
+          // Health is the only writer here too, so a re-read replaces the night.
+          const nightsByDate = new Map(state.sleepLog.map((entry) => [entry.date, entry]));
+          for (const entry of nights) nightsByDate.set(entry.date, entry);
+
           return {
             bodyMeasurements: [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
             checkins: [...checkinByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
             nutritionLog: [...nutritionByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+            sleepLog: [...nightsByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
           };
         });
       },

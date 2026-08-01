@@ -14,6 +14,15 @@ export type SleepSample = {
   hours: number;
   /** 1–5 when the source can express it. */
   quality: number | null;
+  /**
+   * Minutes per stage, when the source distinguishes them. The Watch does;
+   * a manually typed number does not. Kept separate from `hours` because the
+   * stages are what make a quality estimate possible at all — total time
+   * asleep says nothing about how restorative the night was.
+   */
+  stages: { deepMin: number; remMin: number; coreMin: number } | null;
+  /** Minutes awake in bed, when known. Counts against sleep efficiency. */
+  awakeMin: number | null;
   source: DataSource;
 };
 

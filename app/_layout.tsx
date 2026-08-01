@@ -65,6 +65,10 @@ function useHealthProviders() {
               date: checkin.date,
               hours: checkin.sleepHours as number,
               quality: checkin.sleepQuality,
+              // A typed-in night has no stage breakdown and no measure of time
+              // awake; claiming either would be inventing it.
+              stages: null,
+              awakeMin: null,
               source: checkin.source,
             })),
         bodyComposition: () => useAppStore.getState().bodyMeasurements,
@@ -116,6 +120,7 @@ export default function RootLayout() {
           <Stack.Screen name="checkin" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="log-weight" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="fuel" />
+          <Stack.Screen name="sleep" />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

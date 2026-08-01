@@ -94,12 +94,26 @@ export function isHealthKitLinked(): boolean {
 }
 
 /**
- * Sleep states that count as actually asleep.
+ * HKCategoryValueSleepAnalysis, by name.
  *
- * `awake` is 2, sitting between the asleep values, so a naive `value >= 1`
- * would silently count time awake in bed as sleep and overstate the night.
+ * `awake` is 2, sitting *between* the asleep values, so a naive `value >= 1`
+ * silently counts time awake in bed as sleep and overstates the night.
  */
-export const ASLEEP_VALUES = new Set([1, 3, 4, 5]);
+export const SLEEP_VALUE = {
+  inBed: 0,
+  asleepUnspecified: 1,
+  awake: 2,
+  core: 3,
+  deep: 4,
+  rem: 5,
+} as const;
+
+export const ASLEEP_VALUES = new Set<number>([
+  SLEEP_VALUE.asleepUnspecified,
+  SLEEP_VALUE.core,
+  SLEEP_VALUE.deep,
+  SLEEP_VALUE.rem,
+]);
 
 /** Fetch every matching sample: HealthKit treats a non-positive limit as "all". */
 export const NO_LIMIT = 0;
