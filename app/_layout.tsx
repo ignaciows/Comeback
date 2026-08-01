@@ -9,6 +9,7 @@ import { SecondaryButton } from '@/components/Button';
 import { Text } from '@/design-system/Text';
 import { colors, spacing } from '@/design-system/tokens';
 import { createManualHealthDataProvider, registerHealthProvider } from '@/services/health/HealthDataProvider';
+import { useWeatherSync } from '@/services/weather/useWeather';
 import { useAppStore } from '@/store/useAppStore';
 
 /**
@@ -89,6 +90,7 @@ function useHydrationTimeout() {
 export default function RootLayout() {
   useHealthProviders();
   useHydrationTimeout();
+  useWeatherSync();
 
   // The navigator is always mounted. Withholding it until some condition is met
   // leaves expo-router with nothing to consider "ready", which keeps the splash
@@ -113,6 +115,7 @@ export default function RootLayout() {
           <Stack.Screen name="previous-plan" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="checkin" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="log-weight" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="fuel" />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -57,12 +57,29 @@ export type ActivitySample = {
   source: DataSource;
 };
 
+/**
+ * What was eaten in a day. HealthKit's dietary types are the transport: MIKUY
+ * logs a meal, writes it to Health, and this is how Comeback reads it back —
+ * the same "Health as the shared bus" pattern body weight already uses for
+ * Renpho. Multiple entries in a day are summed by HealthKit before this ever
+ * sees them.
+ */
+export type NutritionSample = {
+  date: ISODate;
+  kcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  source: DataSource;
+};
+
 export type HealthCapability =
   | 'sleep'
   | 'bodyComposition'
   | 'cardiovascular'
   | 'workouts'
-  | 'activity';
+  | 'activity'
+  | 'nutrition';
 
 export interface HealthDataProvider {
   readonly id: DataSource;
@@ -76,6 +93,7 @@ export interface HealthDataProvider {
   getCardiovascular(from: ISODate, to: ISODate): Promise<CardiovascularSample[]>;
   getWorkouts(from: ISODate, to: ISODate): Promise<WorkoutSample[]>;
   getActivity(from: ISODate, to: ISODate): Promise<ActivitySample[]>;
+  getNutrition(from: ISODate, to: ISODate): Promise<NutritionSample[]>;
 }
 
 type ManualSources = {
@@ -129,6 +147,11 @@ export function createManualHealthDataProvider(sources: ManualSources): HealthDa
     async getActivity() {
       return [];
     },
+    async getNutrition() {
+      // No manual meal log exists yet — MIKUY is the only writer, through
+      // Health. An empty result here is honest, not a zero day.
+      return [];
+    },
   };
 }
 
@@ -155,6 +178,7 @@ export const PLANNED_HEALTH_SOURCES: { id: DataSource; label: string; note: stri
     note: 'Workout duration, heart rate, HRV, daily movement',
   },
   { id: 'renpho', label: 'Renpho', note: 'Body weight and composition' },
+  { id: 'mikuy', label: 'MIKUY', note: 'Calories and macros from logged meals, through Health' },
 ];
 
 /**

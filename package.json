@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@kingstinct/react-native-healthkit": "^14.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",

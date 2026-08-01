@@ -47,7 +47,14 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Comeback uses your location only to find gyms near you. It is never stored or sent anywhere."
+          "locationWhenInUsePermission": "Comeback uses your location to find gyms near you, and \u2014 only if you turn weather on \u2014 to check local conditions. It is rounded to about 11 km before it is sent and never stored."
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Comeback reads your sleep, body weight, heart rate and the meals you log in MIKUY to work out how recovered and how fuelled you are.",
+          "NSHealthUpdateUsageDescription": "Comeback never writes to Health."
         }
       ]
     ],

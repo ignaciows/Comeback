@@ -24,9 +24,19 @@ export function useEngine(): EngineResult {
   const baseline = useAppStore((state) => state.comebackBaseline);
   const weekStartsOn = useAppStore((state) => state.preferences.weekStartsOn);
   const defaultRestSeconds = useAppStore((state) => state.preferences.defaultRestSeconds);
+  const nutrition = useAppStore((state) => state.nutritionLog);
+  const weatherEnabled = useAppStore((state) => state.weatherEnabled);
+  const storedWeather = useAppStore((state) => state.weather);
+  const enabledHabits = useAppStore((state) => state.enabledHabits);
+  const wakeHour = useAppStore((state) => state.wakeHour);
   const persistBaseline = useAppStore((state) => state.persistBaseline);
 
   const date = todayOf();
+  // Nudges are the only time-of-day sensitive part, and the hour is the finest
+  // resolution any of them need — so this is what the memo keys on rather than
+  // re-running the whole engine on a timer.
+  const hour = new Date().getHours();
+  const weather = weatherEnabled ? storedWeather : null;
 
   const result = useMemo(
     () =>
@@ -45,6 +55,11 @@ export function useEngine(): EngineResult {
         baseline,
         weekStartsOn,
         defaultRestSeconds,
+        nutrition,
+        hour,
+        weather,
+        enabledHabits,
+        wakeHour,
       }),
     [
       date,
@@ -61,6 +76,11 @@ export function useEngine(): EngineResult {
       baseline,
       weekStartsOn,
       defaultRestSeconds,
+      nutrition,
+      hour,
+      weather,
+      enabledHabits,
+      wakeHour,
     ],
   );
 

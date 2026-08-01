@@ -2,40 +2,69 @@
  * The one place the app touches a native HealthKit module.
  *
  * The package is loaded through a runtime require rather than a static import,
- * so a bundle built without it — Expo Go, for instance — still starts and
- * simply reports HealthKit as unavailable. Everything above this file is
- * ordinary TypeScript that needs no native code to compile or run.
+ * so a bundle built without it still starts and simply reports HealthKit as
+ * unavailable. Everything above this file is ordinary TypeScript that needs no
+ * native code to compile or run.
  *
- * To turn it on:
- *   1. npx expo install @kingstinct/react-native-healthkit
- *   2. add its config plugin to app.json with the usage descriptions
- *   3. eas build --profile development --platform ios
- *
- * See docs/health-integration.md for the full walk-through.
+ * The types below mirror @kingstinct/react-native-healthkit v14 rather than
+ * describing it loosely: dates come back as `Date` objects, queries take a
+ * `filter.date` range with an explicit `limit`, and authorization takes an
+ * object rather than an array. Getting any of those wrong fails at runtime
+ * inside a try/catch and reads as "no data" — which is indistinguishable from
+ * a user who has not logged anything, so it is worth being exact.
  */
 
+/** Units are passed explicitly so a reading never depends on device locale. */
+export const UNITS = {
+  bodyMass: 'kg',
+  percent: '%',
+  count: 'count',
+  kcal: 'kcal',
+  minute: 'min',
+  countPerMinute: 'count/min',
+  ms: 'ms',
+  gram: 'g',
+} as const;
+
+type DateRange = { startDate: Date; endDate: Date };
+
+type QuantitySample = {
+  startDate: Date;
+  endDate: Date;
+  quantity: number;
+  unit: string;
+};
+
+type CategorySample = {
+  startDate: Date;
+  endDate: Date;
+  value: number;
+};
+
+type WorkoutSampleNative = {
+  startDate: Date;
+  endDate: Date;
+  totalEnergyBurned?: { quantity: number } | null;
+};
+
 type NativeHealthKit = {
-  isHealthDataAvailable: () => Promise<boolean>;
-  requestAuthorization: (read: string[], write?: string[]) => Promise<boolean>;
+  /** Synchronous in v14; `isHealthDataAvailableAsync` is the promise form. */
+  isHealthDataAvailable: () => boolean;
+  isHealthDataAvailableAsync?: () => Promise<boolean>;
+  requestAuthorization: (request: { toRead?: readonly string[]; toShare?: readonly string[] }) => Promise<boolean>;
   queryQuantitySamples: (
     identifier: string,
-    options: { from: Date; to: Date },
-  ) => Promise<{ startDate: string; endDate: string; quantity: number; sourceRevision?: { source?: { name?: string } } }[]>;
-  queryWorkoutSamples: (options: {
-    from: Date;
-    to: Date;
-  }) => Promise<
-    {
-      startDate: string;
-      endDate: string;
-      totalEnergyBurned?: { quantity: number };
-      workoutActivityType?: number;
-    }[]
-  >;
-  queryCategorySamples?: (
+    options: { filter?: { date?: DateRange }; limit: number; unit?: string; ascending?: boolean },
+  ) => Promise<readonly QuantitySample[]>;
+  queryCategorySamples: (
     identifier: string,
-    options: { from: Date; to: Date },
-  ) => Promise<{ startDate: string; endDate: string; value: number }[]>;
+    options: { filter?: { date?: DateRange }; limit: number; ascending?: boolean },
+  ) => Promise<readonly CategorySample[]>;
+  queryWorkoutSamples: (options: {
+    filter?: { date?: DateRange };
+    limit: number;
+    ascending?: boolean;
+  }) => Promise<readonly WorkoutSampleNative[]>;
 };
 
 let cached: NativeHealthKit | null | undefined;
@@ -51,7 +80,9 @@ export function loadHealthKit(): NativeHealthKit | null {
     const loaded = (require as unknown as (name: string) => { default?: NativeHealthKit } & NativeHealthKit)(
       moduleName,
     );
-    cached = (loaded.default ?? loaded) as NativeHealthKit;
+    // The package exports the API both as named exports and as a default
+    // object; prefer whichever actually carries the query functions.
+    cached = (typeof loaded.queryQuantitySamples === 'function' ? loaded : (loaded.default ?? loaded)) as NativeHealthKit;
   } catch {
     cached = null;
   }
@@ -61,6 +92,17 @@ export function loadHealthKit(): NativeHealthKit | null {
 export function isHealthKitLinked(): boolean {
   return loadHealthKit() !== null;
 }
+
+/**
+ * Sleep states that count as actually asleep.
+ *
+ * `awake` is 2, sitting between the asleep values, so a naive `value >= 1`
+ * would silently count time awake in bed as sleep and overstate the night.
+ */
+export const ASLEEP_VALUES = new Set([1, 3, 4, 5]);
+
+/** Fetch every matching sample: HealthKit treats a non-positive limit as "all". */
+export const NO_LIMIT = 0;
 
 /** HealthKit identifiers the app reads. Nothing is ever written back. */
 export const READ_TYPES = [
@@ -74,4 +116,10 @@ export const READ_TYPES = [
   'HKQuantityTypeIdentifierHeartRateVariabilitySDNN',
   'HKCategoryTypeIdentifierSleepAnalysis',
   'HKWorkoutTypeIdentifier',
+  // Written by MIKUY when a meal is logged; read here as the Fuel score's
+  // nutrition signal.
+  'HKQuantityTypeIdentifierDietaryEnergyConsumed',
+  'HKQuantityTypeIdentifierDietaryProtein',
+  'HKQuantityTypeIdentifierDietaryCarbohydrates',
+  'HKQuantityTypeIdentifierDietaryFatTotal',
 ];

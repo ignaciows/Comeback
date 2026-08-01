@@ -6,42 +6,48 @@ import {
   type BodyCompositionSample,
   type CardiovascularSample,
   type HealthDataProvider,
+  type NutritionSample,
   type SleepSample,
   type WorkoutSample,
 } from './HealthDataProvider';
-import { READ_TYPES, isHealthKitLinked, loadHealthKit } from './native/appleHealth';
+import { ASLEEP_VALUES, NO_LIMIT, READ_TYPES, UNITS, isHealthKitLinked, loadHealthKit } from './native/appleHealth';
 
 /**
  * Apple Health, behind the same interface as manual entry.
  *
- * Renpho writes body weight and body fat into Apple Health, and the Watch
- * writes sleep, steps, heart rate, HRV and workouts. Reading from Health is
- * therefore how both arrive — no Renpho account, no separate integration.
+ * Renpho writes body weight and body fat into Apple Health, the Watch writes
+ * sleep, steps, heart rate, HRV and workouts, and MIKUY writes what you ate.
+ * Reading from Health is therefore how all three arrive — no separate account
+ * to link for any of them.
  *
- * Every value keeps `apple_health` or `apple_watch` as its source, so imported
- * numbers stay distinguishable from the ones the user typed, and correctable.
+ * Every value keeps the source it really came from, so imported numbers stay
+ * distinguishable from the ones the user typed, and correctable.
  */
 
-function toDate(value: string): ISODate {
-  return toISODate(new Date(value));
+function toDate(value: Date): ISODate {
+  return toISODate(value);
 }
 
 /** Groups samples by calendar day and reduces each day to one number. */
-function byDay<T>(
-  samples: { startDate: string; value: number }[],
+function byDay(
+  samples: readonly { startDate: Date; quantity: number }[],
   reduce: (values: number[]) => number,
-): { date: ISODate; value: T extends never ? number : number }[] {
+): { date: ISODate; value: number }[] {
   const buckets = new Map<ISODate, number[]>();
   for (const sample of samples) {
     const date = toDate(sample.startDate);
-    buckets.set(date, [...(buckets.get(date) ?? []), sample.value]);
+    buckets.set(date, [...(buckets.get(date) ?? []), sample.quantity]);
   }
-  return [...buckets.entries()].map(([date, values]) => ({ date, value: reduce(values) as never }));
+  return [...buckets.entries()].map(([date, values]) => ({ date, value: reduce(values) }));
 }
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 const mean = (values: number[]) => (values.length === 0 ? 0 : sum(values) / values.length);
 const latest = (values: number[]) => values[values.length - 1] ?? 0;
+
+function indexByDay(entries: { date: ISODate; value: number }[]): Map<ISODate, number> {
+  return new Map(entries.map((entry) => [entry.date, entry.value]));
+}
 
 export function createAppleHealthDataProvider(): HealthDataProvider {
   const module = loadHealthKit();
@@ -64,40 +70,44 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
     }
   };
 
+  /** A whole-day range: HealthKit filters on instants, not calendar days. */
   const range = (from: ISODate, to: ISODate) => ({
-    from: new Date(`${from}T00:00:00`),
-    to: new Date(`${to}T23:59:59`),
+    date: { startDate: new Date(`${from}T00:00:00`), endDate: new Date(`${to}T23:59:59`) },
   });
 
   return {
     id: 'apple_health',
     label: 'Apple Health',
-    capabilities: ['sleep', 'bodyComposition', 'cardiovascular', 'workouts', 'activity'],
+    capabilities: ['sleep', 'bodyComposition', 'cardiovascular', 'workouts', 'activity', 'nutrition'],
 
     async isAvailable() {
-      return guard((native) => native.isHealthDataAvailable(), false);
+      return guard(async (native) => native.isHealthDataAvailable(), false);
     },
 
     async requestPermissions() {
-      return guard((native) => native.requestAuthorization(READ_TYPES), false);
+      return guard((native) => native.requestAuthorization({ toRead: READ_TYPES }), false);
     },
 
     async getSleep(from, to) {
       return guard<SleepSample[]>(async (native) => {
-        if (!native.queryCategorySamples) return [];
-        const samples = await native.queryCategorySamples(
-          'HKCategoryTypeIdentifierSleepAnalysis',
-          range(from, to),
-        );
-        // Asleep states only; "in bed" overstates how much you actually slept.
-        const asleep = samples.filter((sample) => sample.value >= 1);
+        const samples = await native.queryCategorySamples('HKCategoryTypeIdentifierSleepAnalysis', {
+          filter: range(from, to),
+          limit: NO_LIMIT,
+        });
+
+        // Only states that mean actually asleep; "in bed" and "awake" both
+        // overstate the night.
+        const asleep = samples.filter((sample) => ASLEEP_VALUES.has(sample.value));
+
         const hoursByDay = new Map<ISODate, number>();
         for (const sample of asleep) {
-          const hours =
-            (new Date(sample.endDate).getTime() - new Date(sample.startDate).getTime()) / 3_600_000;
+          const hours = (sample.endDate.getTime() - sample.startDate.getTime()) / 3_600_000;
+          // Attributed to the day you woke up, so a night that crosses midnight
+          // counts once, against the morning it belongs to.
           const date = toDate(sample.endDate);
           hoursByDay.set(date, (hoursByDay.get(date) ?? 0) + hours);
         }
+
         return [...hoursByDay.entries()].map(([date, hours]) => ({
           date,
           hours: round(hours, 1),
@@ -110,73 +120,71 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
     async getBodyComposition(from, to) {
       return guard<BodyCompositionSample[]>(async (native) => {
         const [weights, fats] = await Promise.all([
-          native.queryQuantitySamples('HKQuantityTypeIdentifierBodyMass', range(from, to)),
-          native.queryQuantitySamples('HKQuantityTypeIdentifierBodyFatPercentage', range(from, to)),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierBodyMass', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.bodyMass,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierBodyFatPercentage', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.percent,
+          }),
         ]);
 
-        const fatByDay = new Map(
-          byDay(
-            fats.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-            latest,
-          ).map((entry) => [entry.date, entry.value]),
-        );
+        const fatByDay = indexByDay(byDay(fats, latest));
 
-        return byDay(
-          weights.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-          latest,
-        ).map((entry) => ({
-          date: entry.date,
-          weightKg: round(entry.value, 2),
-          bodyFatPercent:
-            fatByDay.get(entry.date) === undefined
-              ? null
-              : // HealthKit stores the percentage as a fraction.
-                round((fatByDay.get(entry.date) as number) * 100, 1),
-          // Renpho and other scales write here; Health is the transport.
-          source: 'renpho' as const,
-        }));
+        return byDay(weights, latest).map((entry) => {
+          const fat = fatByDay.get(entry.date);
+          return {
+            date: entry.date,
+            weightKg: round(entry.value, 2),
+            // Requested as '%', which HealthKit returns as a 0–1 fraction.
+            bodyFatPercent: fat === undefined ? null : round(fat * 100, 1),
+            // Renpho and other scales write here; Health is only the transport.
+            source: 'renpho' as const,
+          };
+        });
       }, []);
     },
 
     async getCardiovascular(from, to) {
       return guard<CardiovascularSample[]>(async (native) => {
         const [resting, hrv] = await Promise.all([
-          native.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', range(from, to)),
-          native.queryQuantitySamples(
-            'HKQuantityTypeIdentifierHeartRateVariabilitySDNN',
-            range(from, to),
-          ),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.countPerMinute,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierHeartRateVariabilitySDNN', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.ms,
+          }),
         ]);
 
-        const hrvByDay = new Map(
-          byDay(
-            hrv.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-            mean,
-          ).map((entry) => [entry.date, entry.value]),
-        );
+        const hrvByDay = indexByDay(byDay(hrv, mean));
 
-        return byDay(
-          resting.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-          mean,
-        ).map((entry) => ({
-          date: entry.date,
-          restingHeartRate: Math.round(entry.value),
-          hrvMs: hrvByDay.get(entry.date) === undefined ? null : Math.round(hrvByDay.get(entry.date) as number),
-          source: 'apple_watch' as const,
-        }));
+        return byDay(resting, mean).map((entry) => {
+          const value = hrvByDay.get(entry.date);
+          return {
+            date: entry.date,
+            restingHeartRate: Math.round(entry.value),
+            hrvMs: value === undefined ? null : Math.round(value),
+            source: 'apple_watch' as const,
+          };
+        });
       }, []);
     },
 
     async getWorkouts(from, to) {
       return guard<WorkoutSample[]>(async (native) => {
-        const workouts = await native.queryWorkoutSamples(range(from, to));
+        const workouts = await native.queryWorkoutSamples({ filter: range(from, to), limit: NO_LIMIT });
         return workouts.map((workout) => ({
           date: toDate(workout.startDate),
-          startedAt: workout.startDate,
-          endedAt: workout.endDate,
-          activeEnergyKcal: workout.totalEnergyBurned
-            ? Math.round(workout.totalEnergyBurned.quantity)
-            : null,
+          startedAt: workout.startDate.toISOString(),
+          endedAt: workout.endDate.toISOString(),
+          activeEnergyKcal: workout.totalEnergyBurned ? Math.round(workout.totalEnergyBurned.quantity) : null,
           averageHeartRate: null,
           maxHeartRate: null,
           source: 'apple_watch' as const,
@@ -187,39 +195,95 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
     async getActivity(from, to) {
       return guard<ActivitySample[]>(async (native) => {
         const [steps, energy, exercise] = await Promise.all([
-          native.queryQuantitySamples('HKQuantityTypeIdentifierStepCount', range(from, to)),
-          native.queryQuantitySamples('HKQuantityTypeIdentifierActiveEnergyBurned', range(from, to)),
-          native.queryQuantitySamples('HKQuantityTypeIdentifierAppleExerciseTime', range(from, to)),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierStepCount', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.count,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierActiveEnergyBurned', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.kcal,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierAppleExerciseTime', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.minute,
+          }),
         ]);
 
-        const energyByDay = new Map(
-          byDay(
-            energy.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-            sum,
-          ).map((entry) => [entry.date, entry.value]),
-        );
-        const exerciseByDay = new Map(
-          byDay(
-            exercise.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-            sum,
-          ).map((entry) => [entry.date, entry.value]),
-        );
+        const energyByDay = indexByDay(byDay(energy, sum));
+        const exerciseByDay = indexByDay(byDay(exercise, sum));
 
-        return byDay(
-          steps.map((sample) => ({ startDate: sample.startDate, value: sample.quantity })),
-          sum,
-        ).map((entry) => ({
-          date: entry.date,
-          steps: Math.round(entry.value),
-          activeEnergyKcal: energyByDay.has(entry.date)
-            ? Math.round(energyByDay.get(entry.date) as number)
-            : null,
-          exerciseMinutes: exerciseByDay.has(entry.date)
-            ? Math.round(exerciseByDay.get(entry.date) as number)
-            : null,
-          standHours: null,
-          source: 'apple_health' as const,
-        }));
+        return byDay(steps, sum).map((entry) => {
+          const kcal = energyByDay.get(entry.date);
+          const minutes = exerciseByDay.get(entry.date);
+          return {
+            date: entry.date,
+            steps: Math.round(entry.value),
+            activeEnergyKcal: kcal === undefined ? null : Math.round(kcal),
+            exerciseMinutes: minutes === undefined ? null : Math.round(minutes),
+            standHours: null,
+            source: 'apple_health' as const,
+          };
+        });
+      }, []);
+    },
+
+    async getNutrition(from, to) {
+      return guard<NutritionSample[]>(async (native) => {
+        const [kcal, protein, carbs, fat] = await Promise.all([
+          native.queryQuantitySamples('HKQuantityTypeIdentifierDietaryEnergyConsumed', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.kcal,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierDietaryProtein', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.gram,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierDietaryCarbohydrates', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.gram,
+          }),
+          native.queryQuantitySamples('HKQuantityTypeIdentifierDietaryFatTotal', {
+            filter: range(from, to),
+            limit: NO_LIMIT,
+            unit: UNITS.gram,
+          }),
+        ]);
+
+        // Every meal is its own sample, so a day is the sum of them — unlike
+        // body weight, which is a point-in-time reading and takes the latest.
+        const kcalByDay = indexByDay(byDay(kcal, sum));
+        const proteinByDay = indexByDay(byDay(protein, sum));
+        const carbsByDay = indexByDay(byDay(carbs, sum));
+        const fatByDay = indexByDay(byDay(fat, sum));
+
+        const dates = new Set([
+          ...kcalByDay.keys(),
+          ...proteinByDay.keys(),
+          ...carbsByDay.keys(),
+          ...fatByDay.keys(),
+        ]);
+
+        return [...dates].map((date) => {
+          const energy = kcalByDay.get(date);
+          const proteinG = proteinByDay.get(date);
+          const carbsG = carbsByDay.get(date);
+          const fatG = fatByDay.get(date);
+          return {
+            date,
+            kcal: energy === undefined ? null : Math.round(energy),
+            proteinG: proteinG === undefined ? null : round(proteinG, 1),
+            carbsG: carbsG === undefined ? null : round(carbsG, 1),
+            fatG: fatG === undefined ? null : round(fatG, 1),
+            // MIKUY is the only writer of dietary samples today.
+            source: 'mikuy' as const,
+          };
+        });
       }, []);
     },
   };

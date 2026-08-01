@@ -10,7 +10,7 @@ export type ISODate = string;
 export type ISODateTime = string;
 
 /** Where a value came from. Recorded on every health-related value. */
-export type DataSource = 'manual' | 'apple_health' | 'apple_watch' | 'renpho' | 'calculated';
+export type DataSource = 'manual' | 'apple_health' | 'apple_watch' | 'renpho' | 'mikuy' | 'calculated';
 
 export type Confidence = 'low' | 'medium' | 'high';
 

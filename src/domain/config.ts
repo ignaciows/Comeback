@@ -96,6 +96,42 @@ export const readinessConfig = {
   minBaselineSamples: 3,
 } as const;
 
+export const fuelConfig = {
+  /**
+   * Component weights; must sum to 1. Missing components redistribute, same
+   * rule as momentum.
+   *
+   * Nutrition and sleep are today's inputs — what you can draw on right now.
+   * Training load is not "how hard was your last session" but how much of
+   * your recent readiness trend is still unpaid: it is deliberately the same
+   * signal momentum's recovery component reads, because both questions —
+   * "is my trajectory holding up" and "do I have the resources today" — draw
+   * on the same fact about the last week, just used differently.
+   */
+  weights: {
+    nutrition: 0.4,
+    sleep: 0.35,
+    trainingLoad: 0.25,
+  },
+  nutrition: {
+    /** Protein predicts recovery and performance more directly than total calories. */
+    proteinWeight: 0.6,
+    calorieWeight: 0.4,
+    /** Ratio-to-target range scored at 100; linear falloff outside it. */
+    idealRatio: { min: 0.9, max: 1.1 },
+    /** Beyond this ratio in either direction the score is floored at 0. */
+    floorRatio: { min: 0.4, max: 1.6 },
+    /** How many of the most recent logged days to average — smooths a single odd meal. */
+    windowDays: 2,
+  },
+  sleep: {
+    // Matches readinessConfig.sleep: same hours, so the two scores never
+    // disagree about what "good sleep" means.
+    poor: 4.5,
+    good: 8,
+  },
+} as const;
+
 export const recommendationConfig = {
   /** Readiness below this, with recent training load, suggests recovery. */
   recoveryThreshold: 35,

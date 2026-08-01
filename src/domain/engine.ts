@@ -11,6 +11,8 @@ import {
   scoreCheckin,
   type ReadinessResult,
 } from './readiness/calculateReadiness';
+import { calculateFuel, type FuelResult, type NutritionPoint } from './fuel/calculateFuel';
+import { buildNudges, type Nudge, type WeatherSnapshot } from './nudges/nudges';
 import {
   generateDailyRecommendation,
   type RecommendationResult,
@@ -67,6 +69,15 @@ export type EngineInput = {
   weekStartsOn: 0 | 1;
   /** Only needed to notice that the user rests differently than the default. */
   defaultRestSeconds: number;
+  /** Daily totals imported from MIKUY through Apple Health. */
+  nutrition: NutritionPoint[];
+  /** Local hour, 0–23. Decides which nudges are still actionable. */
+  hour: number;
+  /** Null unless the user turned weather on and it could be read. */
+  weather: WeatherSnapshot | null;
+  enabledHabits: string[];
+  /** Hour the user usually wakes, for the bedtime arithmetic. */
+  wakeHour: number;
 };
 
 export type WeekSummary = {
@@ -84,6 +95,10 @@ export type EngineResult = {
   momentumDelta7: number | null;
   momentumDelta28: number | null;
   readiness: ReadinessResult;
+  /** What today has to draw on: nutrition, sleep and accumulated load. */
+  fuel: FuelResult;
+  /** Ranked, time-aware prompts. Screens show the first. */
+  nudges: Nudge[];
   recommendation: RecommendationResult;
   comeback: ComebackResult;
   /** Set when the engine established a baseline that should be persisted. */
@@ -556,6 +571,35 @@ export function runEngine(input: EngineInput): EngineResult {
         : null,
   });
 
+  // Fuel and the nudges both need the same readiness series momentum reads, so
+  // the three never disagree about the state of the last week.
+  const readinessPoints = toReadinessPoints(input.checkins);
+
+  const fuel = calculateFuel({
+    date: input.today,
+    nutrition: input.nutrition,
+    // The plan's own targets, so "on target" means the plan's definition of it.
+    calorieTargetKcal: projection?.targetKcal ?? null,
+    // The range's lower bound: the floor that has to be cleared, not the ceiling.
+    proteinTargetG: input.goal?.proteinTargetG ?? projection?.proteinTargetG[0] ?? null,
+    checkin: todayCheckin,
+    readiness: readinessPoints,
+  });
+
+  const nudges = buildNudges({
+    date: input.today,
+    hour: input.hour,
+    checkins: input.checkins,
+    plannedToday: todayPlanned,
+    trainedToday: sessions.some((session) => session.date === input.today),
+    momentumScore: momentum?.score ?? null,
+    momentumState: momentum?.state ?? null,
+    fuelScore: fuel.score,
+    weather: input.weather,
+    enabledHabits: input.enabledHabits,
+    wakeHour: input.wakeHour,
+  });
+
   const verdict = judgePlan({
     today: input.today,
     sessions: input.sessions,
@@ -573,6 +617,8 @@ export function runEngine(input: EngineInput): EngineResult {
     momentumDelta7,
     momentumDelta28,
     readiness,
+    fuel,
+    nudges,
     recommendation,
     comeback,
     derivedBaseline: input.baseline ? null : derivedBaseline,

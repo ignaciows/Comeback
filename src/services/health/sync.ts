@@ -1,4 +1,4 @@
-import type { BodyMeasurement, DailyCheckin, ISODate } from '@/domain/types';
+import type { BodyMeasurement, DailyCheckin, DataSource, ISODate } from '@/domain/types';
 import { addDays, today as todayOf } from '@/utils/date';
 import type { HealthDataProvider } from './HealthDataProvider';
 
@@ -18,8 +18,19 @@ export type SyncResult = {
   weights: BodyMeasurement[];
   /** Only the sleep field is filled; the rest of the check-in stays the user's. */
   sleep: { date: ISODate; hours: number }[];
+  /** Daily totals from MIKUY's meals, read back through Health. */
+  nutrition: NutritionDay[];
   imported: number;
   skipped: number;
+};
+
+export type NutritionDay = {
+  date: ISODate;
+  kcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  source: DataSource;
 };
 
 export type SyncInput = {
@@ -40,9 +51,10 @@ export async function syncHealthData({
 }: SyncInput): Promise<SyncResult> {
   const from = addDays(today, -days);
 
-  const [composition, sleep] = await Promise.all([
+  const [composition, sleep, nutritionSamples] = await Promise.all([
     provider.getBodyComposition(from, today),
     provider.getSleep(from, today),
+    provider.getNutrition(from, today),
   ]);
 
   // A manual entry for a day wins: the user stood on the scale and typed it.
@@ -88,10 +100,25 @@ export async function syncHealthData({
     })
     .map((sample) => ({ date: sample.date, hours: sample.hours }));
 
+  // Nutrition has no manual counterpart to defend, so there is nothing to
+  // reconcile: Health is the only writer and a re-read simply replaces the
+  // day's totals with the current ones.
+  const nutrition: NutritionDay[] = nutritionSamples
+    .filter((sample) => sample.kcal !== null || sample.proteinG !== null)
+    .map((sample) => ({
+      date: sample.date,
+      kcal: sample.kcal,
+      proteinG: sample.proteinG,
+      carbsG: sample.carbsG,
+      fatG: sample.fatG,
+      source: sample.source,
+    }));
+
   return {
     weights,
     sleep: sleepUpdates,
-    imported: weights.length + sleepUpdates.length,
+    nutrition,
+    imported: weights.length + sleepUpdates.length + nutrition.length,
     skipped,
   };
 }

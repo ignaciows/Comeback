@@ -11,6 +11,7 @@ import { SetupList } from '@/features/onboarding/NextStepCard';
 import { Screen } from '@/components/Screen';
 import { Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
+import { fuelLabel } from '@/domain/fuel/calculateFuel';
 import { momentumStateLabel } from '@/domain/momentum/calculateMomentum';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { readinessLabel } from '@/domain/readiness/calculateReadiness';
@@ -65,7 +66,18 @@ export default function TodayScreen() {
     preferredWeekdays: training.preferredWeekdays,
     routineDayIds: routine?.days.map((day) => day.id) ?? [],
   });
-  const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict } = engine;
+  const { recommendation, momentum, readiness, week, projection, adaptation, drift, routeProgress, verdict, fuel, nudges } =
+    engine;
+  // One at a time: a list of ways you are falling short is a list of reasons
+  // to close the app.
+  const nudge = nudges[0] ?? null;
+
+  // The reveal stagger has to stay contiguous whichever optional blocks are
+  // present, so each index is derived from the one above it rather than fixed.
+  const heroIndex = setup.length > 0 ? 2 : 1;
+  const nudgeIndex = heroIndex + 1;
+  const weekIndex = nudgeIndex + (nudge ? 1 : 0);
+  const navIndex = weekIndex + 1;
   // At most one suggestion here; the rest wait on their own screen.
   const openProposal = engine.proposals.find((entry) => !applied.includes(entry.id)) ?? null;
   const todayPlanned = plannedSessions.find((entry) => entry.date === date && entry.status === 'planned') ?? null;
@@ -110,7 +122,7 @@ export default function TodayScreen() {
       ) : null}
 
       {/* The whole point of the screen. */}
-      <Reveal index={setup.length > 0 ? 2 : 1}>
+      <Reveal index={heroIndex}>
         <View style={styles.hero}>
           <View style={styles.heroHead}>
             <StatusPill
@@ -165,13 +177,29 @@ export default function TodayScreen() {
         </View>
       </Reveal>
 
+      {/* The one lever worth pulling right now. Time-aware: a bedtime message
+          is only here in the evening, and weather only on a training day. */}
+      {nudge ? (
+        <Reveal index={nudgeIndex}>
+          <View style={styles.nudge}>
+            <Text variant="body">{nudge.headline}</Text>
+            <Text variant="caption" tone="tertiary" style={styles.nudgeDetail}>
+              {nudge.detail}
+            </Text>
+            {nudge.kind === 'habit' ? (
+              <TextButton label="Habits" onPress={() => router.push('/fuel')} style={styles.nudgeAction} />
+            ) : null}
+          </View>
+        </Reveal>
+      ) : null}
+
       {/* Where the week stands, and what the plan has done about the days
           that did not happen. Tapping it opens the whole road. */}
-      <Reveal index={setup.length > 0 ? 3 : 2}>
+      <Reveal index={weekIndex}>
         <WeekStrip plan={weekPlan} onPress={() => router.push('/roadmap')} style={styles.week} />
       </Reveal>
 
-      <Reveal index={setup.length > 0 ? 4 : 3}>
+      <Reveal index={navIndex}>
         <NavGroup style={styles.group}>
           <NavRow
             label="Why this session"
@@ -197,6 +225,14 @@ export default function TodayScreen() {
               track({ name: 'momentum_viewed', state: momentum?.state ?? 'unknown' });
               router.push('/momentum');
             }}
+          />
+          <NavRow
+            label="Fuel"
+            icon="nutrition"
+            value={fuel.score === null ? '—' : `${Math.round(fuel.score)}`}
+            detail={fuel.score === null ? 'Connect MIKUY and check in' : fuelLabel(fuel.score)}
+            tone={fuel.score !== null && fuel.score >= 60 ? 'accent' : 'neutral'}
+            onPress={() => router.push('/fuel')}
           />
           {routeProgress?.nextBlock ? (
             <NavRow
@@ -314,5 +350,20 @@ const styles = StyleSheet.create({
   },
   group: {
     marginTop: spacing.xl,
+  },
+  nudge: {
+    marginBottom: spacing.xl,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.md,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+  },
+  nudgeDetail: {
+    marginTop: spacing.xs,
+  },
+  nudgeAction: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.sm,
   },
 });

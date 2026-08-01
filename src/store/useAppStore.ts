@@ -44,6 +44,8 @@ import type {
   WorkoutSession,
   WorkoutSet,
 } from '@/domain/types';
+import type { NutritionDay } from '@/services/health/sync';
+import type { WeatherSnapshot } from '@/domain/nudges/nudges';
 import { track } from '@/services/analytics/analytics';
 import { asyncStorageAdapter, STORAGE_KEY } from '@/services/storage/adapter';
 import { addDays, daysBetween, nowISO, startOfWeek, today as todayOf, weekdayOf } from '@/utils/date';
@@ -196,6 +198,19 @@ export type AppState = {
 
   checkins: DailyCheckin[];
   bodyMeasurements: BodyMeasurement[];
+  /** Daily totals imported from MIKUY through Apple Health. */
+  nutritionLog: NutritionDay[];
+  /** Habit ids the user switched on. */
+  enabledHabits: string[];
+  /**
+   * Weather is the only thing in the app that reaches the network, so it stays
+   * off until it is asked for explicitly.
+   */
+  weatherEnabled: boolean;
+  /** Last reading, kept so a nudge survives a moment without connectivity. */
+  weather: (WeatherSnapshot & { fetchedAt: string }) | null;
+  /** Hour the user usually wakes. Drives the bedtime nudge's arithmetic. */
+  wakeHour: number;
   comebackBaseline: ComebackBaseline | null;
   /** Strategy history; never rewritten, only appended to. */
   phases: PlanPhase[];
@@ -302,7 +317,14 @@ type Actions = {
   applyHealthSync: (result: {
     weights: BodyMeasurement[];
     sleep: { date: ISODate; hours: number }[];
+    nutrition?: NutritionDay[];
   }) => void;
+  /** Switches a habit on or off. */
+  toggleHabit: (habitId: string) => void;
+  setWeatherEnabled: (enabled: boolean) => void;
+  /** Caches the latest reading; clearing it is how a stale one is dropped. */
+  setWeather: (weather: WeatherSnapshot | null) => void;
+  setWakeHour: (hour: number) => void;
   /** Biases the routine towards the muscles the user picked. */
   setMuscleFocus: (muscles: MuscleGroup[]) => void;
   /** Reconfigures the plan to match what the user is actually doing. */
@@ -344,6 +366,11 @@ const initialState: AppState = {
   activeSessionId: null,
   checkins: [],
   bodyMeasurements: [],
+  nutritionLog: [],
+  enabledHabits: [],
+  weatherEnabled: false,
+  weather: null,
+  wakeHour: 7,
   comebackBaseline: null,
   phases: [],
   planRoute: null,
@@ -851,6 +878,11 @@ export const useAppStore = create<Store>()(
           baseline: state.comebackBaseline,
           weekStartsOn: state.preferences.weekStartsOn,
           defaultRestSeconds: state.preferences.defaultRestSeconds,
+          nutrition: state.nutritionLog,
+          hour: new Date().getHours(),
+          weather: state.weatherEnabled ? state.weather : null,
+          enabledHabits: state.enabledHabits,
+          wakeHour: state.wakeHour,
         }).adaptation;
         const routine =
           state.routines.find((entry) => entry.id === routineId) ??
@@ -1409,7 +1441,7 @@ export const useAppStore = create<Store>()(
         });
       },
 
-      applyHealthSync: ({ weights, sleep }) => {
+      applyHealthSync: ({ weights, sleep, nutrition = [] }) => {
         const timestamp = nowISO();
         set((state) => {
           const byDate = new Map(state.bodyMeasurements.map((entry) => [entry.date, entry]));
@@ -1444,12 +1476,35 @@ export const useAppStore = create<Store>()(
             }
           }
 
+          // Health is the only writer of nutrition, so a re-read replaces the
+          // day rather than reconciling with anything the user typed.
+          const nutritionByDate = new Map(state.nutritionLog.map((entry) => [entry.date, entry]));
+          for (const entry of nutrition) nutritionByDate.set(entry.date, entry);
+
           return {
             bodyMeasurements: [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
             checkins: [...checkinByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
+            nutritionLog: [...nutritionByDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1)),
           };
         });
       },
+
+      toggleHabit: (habitId) =>
+        set((state) => ({
+          enabledHabits: state.enabledHabits.includes(habitId)
+            ? state.enabledHabits.filter((id) => id !== habitId)
+            : [...state.enabledHabits, habitId],
+        })),
+
+      // Turning weather off drops the cached reading too: leaving a stale one
+      // behind would keep producing nudges from data the user just revoked.
+      setWeatherEnabled: (enabled) =>
+        set((state) => ({ weatherEnabled: enabled, weather: enabled ? state.weather : null })),
+
+      setWeather: (weather) =>
+        set({ weather: weather ? { ...weather, fetchedAt: nowISO() } : null }),
+
+      setWakeHour: (hour) => set({ wakeHour: Math.max(0, Math.min(23, Math.round(hour))) }),
 
       /**
        * Picking muscles rewrites the live routine rather than waiting for the
@@ -1914,6 +1969,11 @@ export function selectEngine(state: AppState) {
     baseline: state.comebackBaseline,
     weekStartsOn: state.preferences.weekStartsOn,
     defaultRestSeconds: state.preferences.defaultRestSeconds,
+    nutrition: state.nutritionLog,
+    hour: new Date().getHours(),
+    weather: state.weatherEnabled ? state.weather : null,
+    enabledHabits: state.enabledHabits,
+    wakeHour: state.wakeHour,
   });
 }
 

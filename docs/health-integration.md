@@ -1,7 +1,8 @@
-# Connecting Apple Health, Apple Watch and Renpho
+# Connecting Apple Health, Apple Watch, Renpho and MIKUY
 
-Everything above the native boundary is written and tested. What is missing is a
-build that contains HealthKit — Expo Go cannot, by design.
+The integration is installed and wired up. `@kingstinct/react-native-healthkit`
+is a dependency and its config plugin is in `app.json`, so any development or
+production build reads Health; Expo Go cannot, by design.
 
 ## Why Expo Go cannot do it
 
@@ -25,35 +26,49 @@ the air exactly like Expo Go does.
 The native module is loaded through a runtime require, so the current bundle —
 without the package — starts normally and reports Health as unavailable.
 
-## Turning it on
+## Building it
+
+The package and its plugin are already in place, so this is the whole step:
 
 ```bash
-npx expo install @kingstinct/react-native-healthkit
+eas build --profile preview --platform ios
 ```
 
-Add the plugin to `app.json`:
+This needs an Apple Developer account to sign for a physical device.
 
-```json
-["@kingstinct/react-native-healthkit", {
-  "NSHealthShareUsageDescription": "Comeback reads your weight, sleep and workouts to adapt your training.",
-  "NSHealthUpdateUsageDescription": "Comeback does not write to Health."
-}]
-```
+## Matching the native API
 
-Then build and install:
+`native/appleHealth.ts` mirrors @kingstinct/react-native-healthkit v14
+precisely, because getting it wrong fails inside a `try/catch` and reads as
+"no data" — indistinguishable from a user who logged nothing. The details
+that matter:
 
-```bash
-eas build --profile development --platform ios
-```
-
-This needs an Apple Developer account ($99/year) to sign for a physical device.
-Nothing else about the app changes: the same EAS updates keep working.
+- Sample dates are `Date` objects, not strings.
+- Queries take `{ filter: { date: { startDate, endDate } }, limit }`, where a
+  non-positive `limit` means "all".
+- `requestAuthorization` takes `{ toRead: [...] }`, not a bare array.
+- `isHealthDataAvailable()` is synchronous.
+- Units are passed explicitly on every quantity query, so a reading never
+  depends on device locale.
+- Asleep is values 1, 3, 4 and 5. **`awake` is 2**, sitting between them, so
+  filtering on `value >= 1` counts time awake in bed as sleep.
 
 ## Renpho
 
 Renpho has no public API and does not need one. In the Renpho app, enable Apple
 Health syncing; weight and body-fat readings land in Health and Comeback reads
 them from there, tagged `renpho`.
+
+## MIKUY
+
+MIKUY writes what you eat into Apple Health as dietary samples — energy,
+protein, carbohydrates and fat. Comeback reads them back and sums each day,
+since every meal is a separate sample. That is the whole integration: no
+account to link, no API between the two apps.
+
+Those daily totals are the nutrition component of **Fuel**
+(`domain/fuel/calculateFuel.ts`), scored against the calorie and protein
+targets the plan already computes.
 
 ## What the Watch adds
 
