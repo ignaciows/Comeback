@@ -23,6 +23,7 @@ import { ExerciseRow } from '@/features/training/ExerciseRow';
 import { RestTimer } from '@/features/training/RestTimer';
 import { SessionBar } from '@/features/training/SessionBar';
 import { SetRow } from '@/features/training/SetRow';
+import { WarmupCard } from '@/features/training/WarmupCard';
 import { sessionProgress } from '@/domain/training/sessionProgress';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -173,6 +174,11 @@ export default function SessionScreen() {
             resumeSession(session.id);
           }}
         />
+      ) : null}
+
+      {/* Before anything heavy. Built from today's patterns, not a ritual. */}
+      {!readOnly && session.exercises.length > 0 ? (
+        <WarmupCard session={session} history={sessions} />
       ) : null}
 
       {/* Same session, one set at a time — for when a movement needs watching. */}

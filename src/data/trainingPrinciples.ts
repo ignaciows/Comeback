@@ -83,11 +83,13 @@ export const TRAINING_PRINCIPLES: Principle[] = [
   },
   {
     id: 'warmup',
-    title: 'Ramp into the first heavy set',
-    application: 'Compounds over 30 kg get two or three light sets at 50, 70 and 85 % before the working weight.',
+    title: 'Ten minutes: raise, prepare, ramp',
+    application:
+      'Every session opens with a warm-up built from the patterns it contains — a few minutes to get warm, up to three mobility drills, then light sets at 50, 70 and 85 % into the first compound.',
     detail:
-      'Rehearsing the pattern under rising load raises muscle temperature and readies the movement without spending the session. Isolation work does not need it.',
-    source: 'ACSM position stand (2009); standard warm-up practice',
+      'Structured neuromuscular warm-ups roughly halve acute injury rates, and the effect comes from the structure rather than the length: ten focused minutes does it. Static stretching is deliberately left out — holding a stretch before lifting lowers force output for up to an hour without lowering injury risk, while moving through range costs nothing.',
+    source:
+      'Lauersen et al. (2014) meta-analysis; Soligard et al. (2008); Behm et al. (2016) position paper; Simic et al. (2013); ACSM position stand (2009)',
   },
   {
     id: 'protein',
