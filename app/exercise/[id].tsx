@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 import { LineChart } from '@/components/Chart';
 import { EmptyState, Note } from '@/components/Feedback';
@@ -14,6 +14,7 @@ import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
 import { FormGuideContent } from '@/features/training/FormGuide';
 import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
+import { exerciseArt, isBorrowedArt } from '@/features/training/exerciseArt';
 import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { MuscleMap } from '@/features/training/MuscleMap';
 import { useCompletedSessions } from '@/store/hooks';
@@ -86,6 +87,20 @@ export default function ExerciseDetailScreen() {
       {meta ? (
         <Section title="Find it in the gym" footnote={equipmentHint(meta.equipment) ?? undefined}>
           <EquipmentIllustration equipment={meta.equipment} size={56} />
+        </Section>
+      ) : null}
+
+      {/* El músculo que trabaja, encendido sobre el maniquí. Va antes que el
+          texto porque una imagen contesta «¿dónde lo tengo que sentir?»
+          más rápido que tres líneas. */}
+      {exerciseArt(id) ? (
+        <Section title="Where it should land">
+          <Image source={exerciseArt(id)!} style={styles.render} resizeMode="contain" />
+          {isBorrowedArt(id) ? (
+            <Text variant="caption" tone="tertiary">
+              Same movement pattern — the highlighted muscles are the ones this lift trains.
+            </Text>
+          ) : null}
         </Section>
       ) : null}
 
@@ -172,6 +187,12 @@ export default function ExerciseDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  render: {
+    width: '100%',
+    aspectRatio: 1,
+    maxHeight: 260,
+    borderRadius: 18,
+  },
   metrics: {
     flexDirection: 'row',
     gap: spacing.xl,
