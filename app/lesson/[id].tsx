@@ -12,6 +12,7 @@ import { motion } from '@/design-system/motion';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { findLesson, nextLesson } from '@/data/lessons';
 import { artFor } from '@/features/learn/lessonArt';
+import { LessonDiagram, hasDiagram } from '@/features/learn/LessonDiagram';
 import { useAppStore } from '@/store/useAppStore';
 
 /**
@@ -92,7 +93,15 @@ export default function LessonScreen() {
         {lesson.title}
       </Text>
 
-      {art ? <Image source={art} style={styles.art} resizeMode="contain" /> : null}
+      {/* Las siete primeras lecciones traen PNG; el resto dibuja su diagrama
+          en SVG, que es lo mismo pero editable y nítido a cualquier tamaño. */}
+      {art ? (
+        <Image source={art} style={styles.art} resizeMode="contain" />
+      ) : hasDiagram(lesson.id) ? (
+        <View style={styles.art}>
+          <LessonDiagram lessonId={lesson.id} />
+        </View>
+      ) : null}
 
       {/* Cards accumulate rather than replacing each other: by the time the
           question arrives, the whole argument is still on screen. */}

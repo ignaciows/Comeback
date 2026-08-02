@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { ALL_LESSONS, TRACKS, findLesson, nextLesson } from '@/data/lessons';
 import { TRAINING_PRINCIPLES } from '@/data/trainingPrinciples';
 import { learningSummary, nextUnread, trackProgress, type LessonRecord } from '@/domain/learning';
+import { SHAPE_IDS, hasDiagram, shapeFor } from '@/features/learn/diagramGeometry';
 
 const read = (...ids: string[]): LessonRecord[] =>
   ids.map((lessonId) => ({ lessonId, completedOn: '2026-07-30', gotItFirstTry: true }));
@@ -119,6 +120,67 @@ describe('the material itself', () => {
     for (const { lesson } of ALL_LESSONS) {
       const prose = [lesson.takeaway, lesson.check.because, ...lesson.cards.map((card) => card.text)].join(' ');
       expect(scolding.test(prose), `${lesson.id}: "${prose}"`).toBe(false);
+    }
+  });
+});
+
+/**
+ * The two gaps that prompted this round of lessons.
+ *
+ * The rest of the format — id uniqueness, card length, checks, sources — is
+ * already covered above. These assert the *coverage*: the app was asking
+ * people to hit carb and fat targets whose purpose it had never explained,
+ * and using "bulk" and "cut" as if everyone agreed what they meant.
+ */
+describe('the material covers what people actually ask', () => {
+  it('explains each macro on its own, not just protein', () => {
+    const ids = new Set(ALL_LESSONS.map((entry) => entry.lesson.id));
+
+    expect(ids.has('protein')).toBe(true);
+    expect(ids.has('carbs')).toBe(true);
+    expect(ids.has('fat')).toBe(true);
+  });
+
+  it('defines bulking and cutting as rates, not vibes', () => {
+    const bulk = ALL_LESSONS.find((entry) => entry.lesson.id === 'bulk')?.lesson;
+    const cut = ALL_LESSONS.find((entry) => entry.lesson.id === 'cut')?.lesson;
+
+    expect(bulk?.cards.some((card) => /0\.25 to 0\.5 percent/.test(card.text))).toBe(true);
+    expect(cut?.cards.some((card) => /0\.5 to 1 percent/.test(card.text))).toBe(true);
+  });
+});
+
+describe('lesson diagrams', () => {
+  it('only draws for lessons that exist', () => {
+    // A diagram keyed to a renamed or deleted lesson is dead weight that no
+    // screen would ever surface, and nothing else would notice.
+    const ids = new Set(ALL_LESSONS.map((entry) => entry.lesson.id));
+
+    for (const key of SHAPE_IDS) {
+      expect(ids.has(key), `diagram "${key}" has no lesson`).toBe(true);
+    }
+  });
+
+  it('never gives a lesson both a PNG and a drawn diagram', () => {
+    // The screen picks the PNG first, so the second one would silently never
+    // render — a slow way to wonder why an edit did nothing.
+    for (const { lesson } of ALL_LESSONS) {
+      if (lesson.art) {
+        expect(hasDiagram(lesson.id), `${lesson.id} has art and a diagram`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps curve and bar values inside the plot area', () => {
+    for (const key of SHAPE_IDS) {
+      const shape = shapeFor(key);
+      const values =
+        shape?.kind === 'curve' ? shape.points : shape?.kind === 'bars' ? shape.values : [];
+
+      for (const value of values) {
+        expect(value, `${key}: ${value}`).toBeGreaterThanOrEqual(0);
+        expect(value, `${key}: ${value}`).toBeLessThanOrEqual(1);
+      }
     }
   });
 });
