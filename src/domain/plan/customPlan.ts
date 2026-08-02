@@ -44,9 +44,19 @@ export const BLOCK_LIMITS: Record<NutritionStrategy, Limit> = {
   aggressive_cut: { min: 3, max: 12, reason: 'A hard deficit past twelve weeks costs muscle and adherence.' },
 };
 
-/** Nothing is planned further out than this; past a year it is a guess. */
-export const MAX_TOTAL_WEEKS = 52;
-export const MAX_BLOCKS = 4;
+/**
+ * Nothing is planned further out than this.
+ *
+ * Two years, because that is how long the body most people describe actually
+ * takes and a plan that stops at a year cannot say so. Not longer: past this
+ * the projection rests on a muscle-gain rate that your own training age will
+ * have moved out from under, and drawing the curve anyway would be offering
+ * precision that is not there.
+ */
+export const MAX_TOTAL_WEEKS = 104;
+
+/** Enough blocks for four build-and-cut cycles across those two years. */
+export const MAX_BLOCKS = 8;
 
 export function limitsFor(strategy: NutritionStrategy): Limit {
   return BLOCK_LIMITS[strategy] ?? BLOCK_LIMITS.maintain;

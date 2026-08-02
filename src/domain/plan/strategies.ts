@@ -158,6 +158,35 @@ export const STRATEGY_ORDER: NutritionStrategy[] = [
   'bulk',
 ];
 
+/**
+ * Where a lifter is after training for a while.
+ *
+ * Only matters once plans run past a few months. A two-year route simulated at
+ * a beginner's rate the whole way would promise something like twice the
+ * muscle anyone gains in two years, because the rate below is a function of
+ * training age and training age is exactly what a long plan spends.
+ *
+ * The thresholds are the usual reading of the rate model: roughly a year of
+ * consistent training to stop being a beginner, roughly three to be advanced.
+ * Returning lifters move faster because regaining is not building — the
+ * fast window closes in a few months, and after it they are intermediates.
+ */
+export function experienceAfter(start: ExperienceLevel, weeksTrained: number): ExperienceLevel {
+  if (start === 'advanced') return 'advanced';
+
+  if (start === 'returning') {
+    if (weeksTrained >= 104) return 'advanced';
+    return weeksTrained >= 16 ? 'intermediate' : 'returning';
+  }
+
+  if (start === 'beginner') {
+    if (weeksTrained >= 156) return 'advanced';
+    return weeksTrained >= 52 ? 'intermediate' : 'beginner';
+  }
+
+  return weeksTrained >= 104 ? 'advanced' : 'intermediate';
+}
+
 /** Achievable muscle gain, as a fraction of body weight per month. */
 export function monthlyMuscleGainPotential(experience: ExperienceLevel): number {
   switch (experience) {

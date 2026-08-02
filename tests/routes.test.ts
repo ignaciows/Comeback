@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  MAX_ROUTE_WEEKS,
   ROUTES,
   currentBlock,
   getRoute,
@@ -144,5 +145,51 @@ describe('block progression', () => {
     const position = currentBlock(route, 14);
     expect(position?.weeksIntoBlock).toBe(2);
     expect(position?.block.strategy).toBe('cut');
+  });
+});
+
+describe('plans that run for years', () => {
+  const beginner = {
+    today: '2026-01-01' as const,
+    currentWeightKg: 77,
+    heightCm: 186,
+    age: 30,
+    sex: 'male' as const,
+    experience: 'beginner' as const,
+    bodyFatPercent: 18,
+    sessionsPerWeek: 4,
+  };
+
+  it('offers something longer than half a year', () => {
+    const longest = Math.max(
+      ...ROUTES.map((route) => route.blocks.reduce((total, block) => total + block.weeks, 0)),
+    );
+    expect(longest).toBeGreaterThanOrEqual(104);
+    expect(longest).toBeLessThanOrEqual(MAX_ROUTE_WEEKS);
+  });
+
+  // Simulated at the starting rate the whole way, two years of beginner gains
+  // comes out at roughly twice what anyone actually gains in two years. The
+  // ceiling has to fall as the plan spends the training age it is built on.
+  it('does not pay beginner gains for two years', () => {
+    const route = getRoute('two_years')!;
+    const sim = simulateRoute(beginner, route);
+
+    expect(sim.totalWeeks).toBe(104);
+    expect(sim.muscleGainKg).toBeGreaterThan(4);
+    expect(sim.muscleGainKg).toBeLessThan(14);
+
+    // The second year has to build less than the first, or the decay is not
+    // doing anything.
+    const yearOne = sim.points.find((point) => point.week === 52)!;
+    const yearTwo = sim.points[sim.points.length - 1];
+    expect(yearTwo.leanKg - yearOne.leanKg).toBeLessThan(yearOne.leanKg - sim.points[0].leanKg);
+  });
+
+  it('starts an advanced lifter where a beginner ends up', () => {
+    const route = getRoute('two_years')!;
+    const green = simulateRoute(beginner, route);
+    const seasoned = simulateRoute({ ...beginner, experience: 'advanced' }, route);
+    expect(seasoned.muscleGainKg).toBeLessThan(green.muscleGainKg);
   });
 });

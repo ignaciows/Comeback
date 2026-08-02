@@ -40,10 +40,11 @@ describe('dragging a block around', () => {
   });
 
   it('leaves room for the blocks already there', () => {
-    // 46 weeks used elsewhere leaves 6 of the year.
-    expect(clampBlockWeeks('cut', 20, 46)).toBe(6);
+    // Relative to the cap rather than a literal, so raising how far ahead a
+    // plan may run does not quietly turn this into a test of nothing.
+    expect(clampBlockWeeks('cut', 20, MAX_TOTAL_WEEKS - 6)).toBe(6);
     // But never below what makes the block worth running.
-    expect(clampBlockWeeks('cut', 20, 51)).toBe(BLOCK_LIMITS.cut.min);
+    expect(clampBlockWeeks('cut', 20, MAX_TOTAL_WEEKS - 1)).toBe(BLOCK_LIMITS.cut.min);
   });
 
   it('rounds to whole weeks, since half a week is not a training block', () => {
@@ -71,6 +72,9 @@ describe('reviewing a hand-built plan', () => {
       { id: 'a', strategy: 'lean_bulk' as const, weeks: 24 },
       { id: 'b', strategy: 'lean_cut' as const, weeks: 20 },
       { id: 'c', strategy: 'maintain' as const, weeks: 16 },
+      { id: 'd', strategy: 'lean_bulk' as const, weeks: 24 },
+      { id: 'e', strategy: 'cut' as const, weeks: 16 },
+      { id: 'f', strategy: 'maintain' as const, weeks: 16 },
     ];
     expect(totalWeeks(blocks)).toBeGreaterThan(MAX_TOTAL_WEEKS);
 

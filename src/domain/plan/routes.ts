@@ -8,7 +8,12 @@ import type {
 import { addDays } from '@/utils/date';
 import { clamp, round } from '@/utils/math';
 import { calculateMacros } from './simulate';
-import { maintenanceCalories, monthlyMuscleGainPotential, strategyProfile } from './strategies';
+import {
+  experienceAfter,
+  maintenanceCalories,
+  monthlyMuscleGainPotential,
+  strategyProfile,
+} from './strategies';
 
 /**
  * Routes: plans made of blocks.
@@ -85,7 +90,45 @@ export const ROUTES: PlanRoute[] = [
     bestFor: 'Returning to training, where muscle comes back without a surplus.',
     blocks: [{ strategy: 'maintain', weeks: 20, label: 'Recomp' }],
   },
+  {
+    id: 'year_of_building',
+    name: 'A year of building',
+    summary: 'Two build blocks with a short cut between them, and one at the end.',
+    bestFor: 'You are past wanting a result by summer and want the one that lasts.',
+    blocks: [
+      { strategy: 'lean_bulk', weeks: 20, label: 'Build' },
+      { strategy: 'lean_cut', weeks: 6, label: 'Sharpen' },
+      { strategy: 'lean_bulk', weeks: 20, label: 'Build again' },
+      { strategy: 'cut', weeks: 6, label: 'Cut' },
+    ],
+  },
+  {
+    id: 'two_years',
+    name: 'Two years, properly',
+    summary: 'Four build-and-cut cycles. Where an intermediate actually changes shape.',
+    bestFor: 'The body you keep describing is two years of work, and you would rather know that.',
+    blocks: [
+      { strategy: 'lean_bulk', weeks: 20, label: 'Build' },
+      { strategy: 'lean_cut', weeks: 6, label: 'Sharpen' },
+      { strategy: 'lean_bulk', weeks: 20, label: 'Build' },
+      { strategy: 'cut', weeks: 8, label: 'Cut' },
+      { strategy: 'lean_bulk', weeks: 22, label: 'Build' },
+      { strategy: 'lean_cut', weeks: 6, label: 'Sharpen' },
+      { strategy: 'lean_bulk', weeks: 14, label: 'Build' },
+      { strategy: 'cut', weeks: 8, label: 'Cut' },
+    ],
+  },
 ];
+
+/**
+ * The longest route worth planning, and the honest reason for the number.
+ *
+ * Past two years the projection is a curve drawn through assumptions that will
+ * all have changed — your training age moves, so the muscle ceiling moves with
+ * it, and the rate that produced the curve no longer applies. Offering a
+ * five-year plan would be offering precision that does not exist.
+ */
+export const MAX_ROUTE_WEEKS = 104;
 
 export type RoutePoint = {
   week: number;
@@ -148,6 +191,11 @@ export type RouteInput = {
  * surplus beyond it becomes fat rather than more muscle. That cap is the whole
  * reason a faster bulk does not get you there sooner, and simulating weekly is
  * what makes it show up in the curve.
+ *
+ * The cap also falls as the route runs, because training age is what a long
+ * plan spends: by week 60 the beginner who started it is not a beginner, and
+ * simulating two years at the starting rate would promise roughly twice the
+ * muscle anyone gains in two years.
  */
 export function simulateRoute(input: RouteInput, route: PlanRoute): RouteSimulation {
   const startWeight = input.currentWeightKg;
@@ -186,7 +234,8 @@ export function simulateRoute(input: RouteInput, route: PlanRoute): RouteSimulat
 
       if (change > 0) {
         const weeklyMuscleCeiling =
-          ((weight * monthlyMuscleGainPotential(input.experience)) / 4.345) * profile.hypertrophyRate;
+          ((weight * monthlyMuscleGainPotential(experienceAfter(input.experience, week))) / 4.345) *
+          profile.hypertrophyRate;
         leanChange = Math.min(change * profile.qualityRatio, weeklyMuscleCeiling);
         fatChangeThisWeek = change - leanChange;
       } else if (change < 0) {
@@ -197,7 +246,7 @@ export function simulateRoute(input: RouteInput, route: PlanRoute): RouteSimulat
         // Maintenance: recomposition. Muscle is built and fat is lost from the
         // same scale weight, which is why the curve is flat but the split moves.
         const weeklyMuscleCeiling =
-          ((weight * monthlyMuscleGainPotential(input.experience)) / 4.345) *
+          ((weight * monthlyMuscleGainPotential(experienceAfter(input.experience, week))) / 4.345) *
           profile.hypertrophyRate *
           0.5;
         leanChange = weeklyMuscleCeiling;
