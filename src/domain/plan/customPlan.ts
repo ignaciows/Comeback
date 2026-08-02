@@ -34,9 +34,12 @@ type Limit = { min: number; max: number; reason: string };
 
 export const BLOCK_LIMITS: Record<NutritionStrategy, Limit> = {
   bulk: { min: 4, max: 20, reason: 'Under four weeks a surplus moves water, not muscle.' },
+  moderate_bulk: { min: 4, max: 22, reason: 'Under four weeks a surplus moves water, not muscle.' },
   lean_bulk: { min: 4, max: 24, reason: 'Under four weeks a surplus moves water, not muscle.' },
+  slow_bulk: { min: 6, max: 32, reason: 'Gaining this slowly needs six weeks before the scale says anything at all.' },
   maintain: { min: 2, max: 16, reason: 'Holding steady is only worth planning in blocks of a fortnight.' },
   lean_cut: { min: 3, max: 20, reason: 'A deficit needs three weeks before the change is real rather than water.' },
+  moderate_cut: { min: 3, max: 18, reason: 'A deficit needs three weeks before the change is real rather than water.' },
   cut: { min: 3, max: 16, reason: 'A deficit needs three weeks before the change is real rather than water.' },
   aggressive_cut: { min: 3, max: 12, reason: 'A hard deficit past twelve weeks costs muscle and adherence.' },
 };
@@ -182,9 +185,12 @@ export function defaultCustomBlocks(): CustomBlock[] {
 /** The strategies offered in the builder, gaining first. */
 export const BUILDER_STRATEGIES: NutritionStrategy[] = [
   'bulk',
+  'moderate_bulk',
   'lean_bulk',
+  'slow_bulk',
   'maintain',
   'lean_cut',
+  'moderate_cut',
   'cut',
   'aggressive_cut',
 ];

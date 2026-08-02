@@ -41,9 +41,12 @@ export type BiologicalSex = 'male' | 'female' | 'unspecified';
 export type NutritionStrategy =
   | 'aggressive_cut'
   | 'cut'
+  | 'moderate_cut'
   | 'lean_cut'
   | 'maintain'
+  | 'slow_bulk'
   | 'lean_bulk'
+  | 'moderate_bulk'
   | 'bulk';
 
 /** What the user wants. The strategy above is derived from these three. */

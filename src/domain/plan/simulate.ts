@@ -45,27 +45,51 @@ export const FAT_TOLERANCE_LABELS: Record<FatTolerance, string> = {
 /**
  * Strategy is an output, not a question. It follows from what you want, how
  * fast, and how much fat you will accept getting there.
+ *
+ * Each objective is a ladder of four rungs, one per pace, and the rungs are
+ * genuinely different rates — not four names for two plans. They used to be:
+ * with the default fat tolerance, building mapped cautious *and* steady to a
+ * lean bulk and fast *and* max to a bulk, so the picker offered four cards
+ * where two pairs carried the identical calories, the identical fat gain and
+ * the identical projection. Picking between them was picking between labels.
+ *
+ * Fat tolerance slides which four rungs you are offered rather than gating
+ * them, so it still changes the answer and the four paces stay four paces.
+ *
+ * Rates come from the ranges in `strategies.ts`: 0.25–0.5 %BW/week gaining
+ * (Aragon & Schoenfeld; Slater 2019) and 0.5–1.0 %BW/week losing (Helms 2014;
+ * Garthe 2011), with the cautious rung sitting just below each range.
  */
+const LADDERS: Record<PlanObjective, NutritionStrategy[]> = {
+  lean: ['lean_cut', 'moderate_cut', 'cut', 'aggressive_cut'],
+  recomp: ['maintain', 'slow_bulk', 'lean_bulk', 'moderate_bulk'],
+  build: ['maintain', 'slow_bulk', 'lean_bulk', 'moderate_bulk', 'bulk'],
+};
+
+const SPEED_RUNG: Record<PlanSpeed, number> = { cautious: 0, steady: 1, fast: 2, max: 3 };
+
+/**
+ * How far up its ladder each fat tolerance starts.
+ *
+ * "Do not care" sits on the same rung as "some is fine" on purpose: past
+ * roughly +20 % of maintenance the extra calories are fat rather than muscle
+ * (Garthe 2013; Slater 2019), so there is no faster rung to unlock. Not caring
+ * about fat does not make a plan work better, and the picker already flags the
+ * top rung as mostly fat rather than pretending otherwise.
+ */
+const TOLERANCE_OFFSET: Record<FatTolerance, number> = { minimal: 0, some: 1, whatever: 1 };
+
 function deriveStrategy(
   objective: PlanObjective,
   speed: PlanSpeed,
   fatTolerance: FatTolerance,
 ): NutritionStrategy {
-  if (objective === 'lean') {
-    if (speed === 'cautious') return 'lean_cut';
-    if (speed === 'max') return 'aggressive_cut';
-    return 'cut';
-  }
+  const ladder = LADDERS[objective];
 
-  if (objective === 'recomp') {
-    if (speed === 'cautious' || speed === 'steady') return 'maintain';
-    return 'lean_bulk';
-  }
-
-  // Building. A bigger surplus only earns its keep if fat gain is acceptable.
-  if (speed === 'cautious') return 'lean_bulk';
-  if (speed === 'steady') return fatTolerance === 'whatever' ? 'bulk' : 'lean_bulk';
-  return fatTolerance === 'minimal' ? 'lean_bulk' : 'bulk';
+  // The window is four wide and slides over the ladder, so every pace lands on
+  // its own rung whatever the tolerance.
+  const offset = clamp(TOLERANCE_OFFSET[fatTolerance], 0, Math.max(0, ladder.length - 4));
+  return ladder[SPEED_RUNG[speed] + (objective === 'lean' ? 0 : offset)];
 }
 
 /**

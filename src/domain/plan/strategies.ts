@@ -67,6 +67,17 @@ export const STRATEGIES: Record<NutritionStrategy, StrategyProfile> = {
     hypertrophyRate: 0.4,
     tradeoff: 'Small strength losses on the heaviest sets are normal.',
   },
+  moderate_cut: {
+    id: 'moderate_cut',
+    label: 'Moderate cut',
+    summary: 'The middle of the recommended range: fat off, training intact.',
+    weeklyWeightChangePct: -0.0055,
+    energyBalancePct: -0.16,
+    qualityRatio: 0.89,
+    proteinGPerKg: [1.9, 2.3],
+    hypertrophyRate: 0.5,
+    tradeoff: 'A month or so longer than a standard cut for the same fat.',
+  },
   lean_cut: {
     id: 'lean_cut',
     label: 'Slow cut',
@@ -89,6 +100,17 @@ export const STRATEGIES: Record<NutritionStrategy, StrategyProfile> = {
     hypertrophyRate: 0.8,
     tradeoff: 'Recomposition is slow unless you are new or returning.',
   },
+  slow_bulk: {
+    id: 'slow_bulk',
+    label: 'Slow build',
+    summary: 'Gain about as fast as you can actually build. Almost no fat.',
+    weeklyWeightChangePct: 0.00125,
+    energyBalancePct: 0.05,
+    qualityRatio: 0.7,
+    proteinGPerKg: [1.8, 2.2],
+    hypertrophyRate: 0.9,
+    tradeoff: 'The slowest way there. Months before the mirror agrees with you.',
+  },
   lean_bulk: {
     id: 'lean_bulk',
     label: 'Lean bulk',
@@ -99,6 +121,17 @@ export const STRATEGIES: Record<NutritionStrategy, StrategyProfile> = {
     proteinGPerKg: [1.6, 2.2],
     hypertrophyRate: 1,
     tradeoff: 'Scale moves slowly; judge it over months, not weeks.',
+  },
+  moderate_bulk: {
+    id: 'moderate_bulk',
+    label: 'Moderate bulk',
+    summary: 'Faster on the scale. Some of it will be fat, and you will see it.',
+    weeklyWeightChangePct: 0.00375,
+    energyBalancePct: 0.15,
+    qualityRatio: 0.45,
+    proteinGPerKg: [1.7, 2.2],
+    hypertrophyRate: 1,
+    tradeoff: 'Expect to want a short cut at the end of it.',
   },
   bulk: {
     id: 'bulk',
@@ -116,9 +149,12 @@ export const STRATEGIES: Record<NutritionStrategy, StrategyProfile> = {
 export const STRATEGY_ORDER: NutritionStrategy[] = [
   'aggressive_cut',
   'cut',
+  'moderate_cut',
   'lean_cut',
   'maintain',
+  'slow_bulk',
   'lean_bulk',
+  'moderate_bulk',
   'bulk',
 ];
 

@@ -75,9 +75,12 @@ const PLAN_HORIZON_DAYS = 21;
 const DAYS_FOR_STRATEGY: Record<NutritionStrategy, number> = {
   aggressive_cut: 4,
   cut: 4,
+  moderate_cut: 4,
   lean_cut: 4,
   maintain: 4,
+  slow_bulk: 4,
   lean_bulk: 5,
+  moderate_bulk: 5,
   bulk: 5,
 };
 

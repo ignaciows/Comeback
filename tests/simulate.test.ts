@@ -53,7 +53,7 @@ describe('plan simulator', () => {
 
     expect(careful.outcome.fatChangeKg).toBeLessThan(careless.outcome.fatChangeKg);
     expect(careful.strategy).toBe('lean_bulk');
-    expect(careless.strategy).toBe('bulk');
+    expect(careless.strategy).toBe('moderate_bulk');
   });
 
   it('marks the fastest cut as demanding and says what it costs', () => {
@@ -189,5 +189,42 @@ describe('session mechanics', () => {
     const session = workout(daysAgo(1), [{ weightKg: 60, reps: 8 }]);
     expect(wasReduced(sessionMechanics(session, 12))).toBe(true);
     expect(wasReduced(sessionMechanics(session, 1))).toBe(false);
+  });
+});
+
+describe('the four paces are four plans', () => {
+  const SPEEDS = ['cautious', 'steady', 'fast', 'max'] as const;
+  const OBJECTIVES = ['build', 'lean', 'recomp'] as const;
+  const TOLERANCES = ['minimal', 'some', 'whatever'] as const;
+
+  // The picker showed four cards where two pairs carried identical calories
+  // and an identical fat projection, because the pace ladder collapsed onto
+  // two strategies. Choosing between them was choosing between labels.
+  it('never gives two paces the same numbers', () => {
+    for (const objective of OBJECTIVES) {
+      for (const fatTolerance of TOLERANCES) {
+        const seen = SPEEDS.map((speed) => {
+          const plan = simulatePlan({ ...base, objective, speed, fatTolerance });
+          return `${plan.strategy}|${plan.macros.kcal}|${plan.outcome.fatChangeKg}`;
+        });
+        expect(new Set(seen).size, `${objective}/${fatTolerance}: ${seen.join(' , ')}`).toBe(4);
+      }
+    }
+  });
+
+  it('keeps the fat number moving with the pace when building', () => {
+    const fat = SPEEDS.map(
+      (speed) => simulatePlan({ ...base, objective: 'build', speed }).outcome.fatChangeKg,
+    );
+    for (let i = 1; i < fat.length; i += 1) {
+      expect(fat[i], `${SPEEDS[i]} vs ${SPEEDS[i - 1]}`).toBeGreaterThan(fat[i - 1]);
+    }
+  });
+
+  it('still lets fat tolerance change the answer', () => {
+    const lean = simulatePlan({ ...base, objective: 'build', fatTolerance: 'minimal' });
+    const loose = simulatePlan({ ...base, objective: 'build', fatTolerance: 'whatever' });
+    expect(lean.strategy).not.toBe(loose.strategy);
+    expect(lean.outcome.fatChangeKg).toBeLessThan(loose.outcome.fatChangeKg);
   });
 });
