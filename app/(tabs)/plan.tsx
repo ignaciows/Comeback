@@ -125,6 +125,12 @@ export default function PlanTab() {
               detail="What each movement has compounded to"
               onPress={() => router.push('/lifts')}
             />
+            <NavRow
+              label="Muscle ranking"
+              icon="body"
+              detail="Where you are strong, and what is holding the rest back"
+              onPress={() => router.push('/muscles')}
+            />
             <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
           </NavGroup>
         </Reveal>

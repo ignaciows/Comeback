@@ -5,6 +5,8 @@ import type { WorkoutSession } from '@/domain/types';
 import { today as todayOf } from '@/utils/date';
 import { deriveSetupSteps, deriveTodayStep, setupProgress } from '@/domain/nextStep';
 import { sleepStats, type SleepNight, type SleepStats } from '@/domain/sleep/sleepStats';
+import { strengthByExercise } from '@/domain/training/strength';
+import { rankMuscles, type LiftMax, type MuscleRanking } from '@/domain/training/muscleRanking';
 import { useAppStore } from './useAppStore';
 
 /**
@@ -235,4 +237,34 @@ export function useSleepStats(windowDays = 14): SleepStats {
   const nights = useSleepNights();
   const date = todayOf();
   return useMemo(() => sleepStats(nights, date, windowDays), [nights, date, windowDays]);
+}
+
+/**
+ * Where you are strong and where you are behind, from everything logged.
+ *
+ * The maxes come from the strength history rather than a separate test,
+ * because the app has been estimating them set by set the whole time — asking
+ * someone to go and max out to populate a ranking would be asking for a number
+ * it already has, at the price of the one session most likely to hurt them.
+ * The assessment fills the gaps for lifts that have never been logged.
+ */
+export function useMuscleRanking(): MuscleRanking {
+  const sessions = useAppStore((state) => state.sessions);
+  const measurements = useAppStore((state) => state.bodyMeasurements);
+  const profile = useAppStore((state) => state.profile);
+
+  return useMemo(() => {
+    // Body weight is the denominator of every score, so without a weighing
+    // there is nothing to divide by and the ranking has to stay empty rather
+    // than rank everyone against an assumed 80 kg.
+    const bodyWeightKg = [...measurements].sort((a, b) => (a.date < b.date ? 1 : -1))[0]?.weightKg ?? 0;
+
+    const lifts: LiftMax[] = strengthByExercise(sessions).map((entry) => ({
+      exerciseId: entry.exerciseId,
+      oneRepMaxKg: entry.current.estimatedMaxKg,
+      measuredOn: entry.current.weekStart,
+    }));
+
+    return rankMuscles({ lifts, bodyWeightKg, sex: profile?.sex ?? 'unspecified' });
+  }, [sessions, measurements, profile?.sex]);
 }
