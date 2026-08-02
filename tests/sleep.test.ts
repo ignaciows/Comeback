@@ -107,3 +107,25 @@ describe('sleep', () => {
     expect(stats.headline.toLowerCase()).toContain('move a lot');
   });
 });
+
+describe('the sleep window reaches back past midnight', () => {
+  it('keeps a night that started the evening before the window opened', () => {
+    // The bug this pins: a plain midnight-to-midnight query clipped the first
+    // night of every window, because sleep starts before midnight. On the
+    // chart that showed as a short first bar that moved whenever the window
+    // moved — which read as broken rather than wrong.
+    const from = '2026-07-20';
+    const nights: SleepNight[] = [
+      { date: '2026-07-20', hours: 7.5, stages: null, awakeMin: null },
+      { date: '2026-07-21', hours: 7.2, stages: null, awakeMin: null },
+      { date: '2026-07-22', hours: 8.0, stages: null, awakeMin: null },
+    ];
+
+    const stats = sleepStats(nights, '2026-07-22', 14);
+
+    // All three nights survive: none is dropped for having begun "too early".
+    expect(stats.nights).toBe(3);
+    expect(nights.every((night) => night.date >= from)).toBe(true);
+    expect(stats.averageHours).toBeCloseTo(7.6, 1);
+  });
+});

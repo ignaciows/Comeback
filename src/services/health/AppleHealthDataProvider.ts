@@ -75,6 +75,28 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
     date: { startDate: new Date(`${from}T00:00:00`), endDate: new Date(`${to}T23:59:59`) },
   });
 
+  /**
+   * The same range, opened backwards for sleep.
+   *
+   * A night belongs to the morning you woke up, but it *starts* the evening
+   * before — around 23:00, which is before midnight of the first day in the
+   * window. HealthKit filters on instants, so with a plain range the earliest
+   * night in every query came back clipped to whatever fell after midnight,
+   * or missing entirely. On a chart that shows as a short first bar or a
+   * hole, and it moved every time the window moved, which is what made it
+   * look broken rather than wrong.
+   *
+   * Sixteen hours covers any plausible bedtime. Nights that turn out to
+   * belong to a day before `from` are dropped after grouping.
+   */
+  const SLEEP_LOOKBACK_HOURS = 16;
+
+  const sleepRange = (from: ISODate, to: ISODate) => {
+    const startDate = new Date(`${from}T00:00:00`);
+    startDate.setHours(startDate.getHours() - SLEEP_LOOKBACK_HOURS);
+    return { date: { startDate, endDate: new Date(`${to}T23:59:59`) } };
+  };
+
   return {
     id: 'apple_health',
     label: 'Apple Health',
@@ -91,7 +113,7 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
     async getSleep(from, to) {
       return guard<SleepSample[]>(async (native) => {
         const samples = await native.queryCategorySamples('HKCategoryTypeIdentifierSleepAnalysis', {
-          filter: range(from, to),
+          filter: sleepRange(from, to),
           limit: NO_LIMIT,
         });
 
@@ -124,7 +146,9 @@ export function createAppleHealthDataProvider(): HealthDataProvider {
         }
 
         return [...nights.entries()]
-          .filter(([, night]) => night.asleepMin > 0)
+          // The widened query reaches into the evening before `from`; a night
+          // that finished then belongs to a day outside the window.
+          .filter(([date, night]) => night.asleepMin > 0 && date >= from)
           .map(([date, night]) => {
             // Only claim stages when the source actually broke them down; an
             // older watch reports `asleepUnspecified` for the whole night.

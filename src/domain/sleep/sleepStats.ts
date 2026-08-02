@@ -22,8 +22,12 @@ import { clamp, mean, round, standardDeviation } from '@/utils/math';
  *    than rewarding "more is better" without limit. Efficiency — asleep over
  *    time in bed — is folded in, because time awake in bed is the clearest
  *    marker of a broken night.
- *  · **Regularity** — how much bedtime and duration move night to night.
- *    Consistency predicts how rested someone is beyond total hours alone.
+ *  · **Regularity** — how much *duration* moves night to night. The stronger
+ *    signal in the literature is bedtime consistency, but no source wired up
+ *    here reports a bedtime, so this measures the part it actually has. It is
+ *    called out because an earlier version of this comment claimed bedtime
+ *    too, and a metric that describes more than it computes is how an app
+ *    ends up quietly wrong.
  *
  * When a source cannot answer one of these it returns null and says so. A
  * watch that reports a night as simply "asleep" has no stages, and inventing
