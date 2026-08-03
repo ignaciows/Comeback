@@ -3,18 +3,20 @@ import type { ImageSourcePropType } from 'react-native';
 /**
  * The render of each movement: what the exercise looks like.
  *
- * A flat blueprint diagram of the movement, drawn in the app's own palette:
- * near-black ground, thin grey outlines, the worked muscles filled in the
- * accent. Not a photo of a person — a photo invites you to compare bodies,
- * and a body is not the information. Not a rendered sculpture either: the
- * rest of the app is flat and 2D, and a marble figure with shadows sitting
- * inside it reads as borrowed from somewhere else.
+ * A low-poly wireframe of the movement, glowing in the accent on black — a
+ * body drawn as a mesh of light rather than a body. Not a photo of a person:
+ * a photo invites you to compare bodies, and a body is not the information.
+ * Not a rendered sculpture either — the rest of the app is flat, and a marble
+ * figure with shadows inside it reads as borrowed from somewhere else. The
+ * wireframe sits between the two: three-dimensional enough to show the shape
+ * of the movement, abstract enough that there is nobody in it to compare
+ * yourself against.
  *
- * Generated with Recraft in vector mode, which takes the palette as literal
- * hex — `#0A0B0D` ground and `#5BE49B` accent are passed as parameters rather
- * than described in words, so the art cannot drift away from the tokens. It
- * returns real SVG; the assets are rasterised to webp only because the app
- * has no SVG asset pipeline yet.
+ * Generated raster, not vector, and that is the whole point. The glow is what
+ * makes the style, and a vector cannot glow — Recraft's wireframe came out
+ * structurally right and visually dead beside it. The trade is losing literal
+ * hex control of the palette, which is worth it here because the mesh reads
+ * as one accent colour regardless.
  *
  * Two things the prompt must always carry. Describing a muscle's location in
  * prose gets that prose drawn into the picture as callout labels, so every
@@ -48,6 +50,7 @@ export const EXERCISE_ART: Record<string, ImageSourcePropType> = {
   face_pull: require('../../../assets/exercises/face_pull.webp'),
   hanging_leg_raise: require('../../../assets/exercises/hanging_leg_raise.webp'),
   hip_thrust: require('../../../assets/exercises/hip_thrust.webp'),
+  lat_pulldown: require('../../../assets/exercises/lat_pulldown.webp'),
   lateral_raise: require('../../../assets/exercises/lateral_raise.webp'),
   leg_extension: require('../../../assets/exercises/leg_extension.webp'),
   overhead_press: require('../../../assets/exercises/overhead_press.webp'),
@@ -77,7 +80,6 @@ const FALLBACK: Record<string, string> = {
   dumbbell_shoulder_press: 'overhead_press',
   shoulder_press_machine: 'overhead_press',
   assisted_pull_up: 'pull_up',
-  lat_pulldown: 'pull_up',
   barbell_curl: 'dumbbell_curl',
   cable_curl: 'dumbbell_curl',
   dumbbell_row: 'barbell_row',
