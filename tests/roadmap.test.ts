@@ -18,6 +18,7 @@ const phase = (patch: Partial<PlanPhaseView> = {}): PlanPhaseView => ({
   strategy: 'lean_bulk',
   endWeightKg: null,
   endBodyFatPercent: null,
+  macros: { kcal: 2600, proteinG: 150, fatG: 72, carbsG: 325 },
   startsOn: '2026-08-01',
   endsOn: '2026-09-12',
   days: 42,

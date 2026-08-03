@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, View } from 'react-native';
 
 import { StatusPill } from '@/components/Feedback';
 import { AnimatedNumber } from '@/components/motion/AnimatedNumber';
@@ -17,6 +17,7 @@ import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
+import { mikuyPlanLink } from '@/domain/plan/mikuyLink';
 import { feelLine, planMilestones } from '@/domain/plan/milestones';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
@@ -152,6 +153,31 @@ export default function PlanTab() {
               onPress={() => router.push('/muscles')}
             />
             <NavRow label="Progress" icon="progress" onPress={() => router.push('/progress')} />
+            {/* Los macros de la fase en la que estás, a MIKUY. Sólo aparece
+                cuando hay una fase: sin plan no hay nada que mandar. */}
+            {currentPhase ? (
+              <NavRow
+                label="Send macros to MIKUY"
+                icon="nutrition"
+                detail={mikuyPlanLink({
+                  macros: currentPhase.macros,
+                  phaseLabel: currentPhase.label,
+                  validUntil: currentPhase.endsOn,
+                }).summary}
+                onPress={() => {
+                  const link = mikuyPlanLink({
+                    macros: currentPhase.macros,
+                    phaseLabel: currentPhase.label,
+                    validUntil: currentPhase.endsOn,
+                  });
+                  Linking.openURL(link.url).catch(() => {
+                    // Sin MIKUY instalado no hay a dónde ir, y un error de
+                    // sistema sin explicación es peor que no hacer nada.
+                    Alert.alert('MIKUY no está instalado', link.summary);
+                  });
+                }}
+              />
+            ) : null}
           </NavGroup>
         </Reveal>
       </Screen>

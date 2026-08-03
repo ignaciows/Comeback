@@ -1,6 +1,7 @@
 import type { ISODate, NutritionStrategy, WorkoutSession } from '@/domain/types';
 import { addDays, daysBetween, isWithinDays } from '@/utils/date';
 import { clamp, round } from '@/utils/math';
+import { calculateMacros, type Macros } from './simulate';
 import type { RouteSimulation } from './routes';
 import { strategyProfile } from './strategies';
 
@@ -38,6 +39,16 @@ export type PlanPhaseView = {
   /** Projected body fat at the end of it. Null without a starting reading. */
   endBodyFatPercent: number | null;
   kcal: number;
+  /**
+   * What to eat during this phase, at the weight this phase is planned around.
+   *
+   * Calories alone do not tell anyone what to buy. And they have to be
+   * recomputed per phase rather than once for the plan: protein is a function
+   * of body weight, so a phase that ends six kilos heavier asks for more of it
+   * than the one before, and a single figure at the top of the plan would be
+   * wrong for every phase except the one it was calculated in.
+   */
+  macros: Macros;
   /** What this phase is for, and what it costs. Two sentences at most. */
   story: string;
   state: 'done' | 'current' | 'ahead';
@@ -135,7 +146,10 @@ export function buildPhases({
       : null;
 
   const finish = (
-    parts: Omit<PlanPhaseView, 'state' | 'daysDone' | 'sessionsDone' | 'story' | 'endWeightKg' | 'endBodyFatPercent'>[],
+    parts: Omit<
+      PlanPhaseView,
+      'state' | 'daysDone' | 'sessionsDone' | 'story' | 'endWeightKg' | 'endBodyFatPercent' | 'macros'
+    >[],
   ): PlanPhaseView[] =>
     parts.map((part, index) => {
       const next = parts[index + 1]?.strategy ?? null;
@@ -146,9 +160,16 @@ export function buildPhases({
       if (runningWeight !== null) runningWeight = round(runningWeight + part.weightChangeKg, 1);
       if (runningFatKg !== null) runningFatKg = Math.max(0, runningFatKg + part.fatChangeKg);
 
+      // Planned around the weight you are at during the phase, not the weight
+      // you finish it at: you eat this for the whole stretch, not on the last
+      // day of it.
+      const duringWeight = (runningWeight ?? 0) - part.weightChangeKg / 2;
+      const protein = (strategyProfile(part.strategy).proteinGPerKg[0] + strategyProfile(part.strategy).proteinGPerKg[1]) / 2;
+
       return {
         ...part,
         endWeightKg: runningWeight,
+        macros: calculateMacros(part.kcal, Math.max(1, duringWeight), protein),
         endBodyFatPercent:
           runningWeight !== null && runningFatKg !== null && runningWeight > 0
             ? round(clamp((runningFatKg / runningWeight) * 100, 2, 60), 1)

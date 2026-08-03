@@ -97,6 +97,13 @@ function PhaseBlock({
         </Text>
       ) : null}
 
+      {/* Lo que se come durante la fase. Recalculado por fase porque la
+          proteína sale del peso, y un solo número arriba del plan estaría
+          mal en todas las fases menos en la que se calculó. */}
+      <Text variant="caption" tone="tertiary" mono style={styles.macros}>
+        {`${phase.macros.kcal} kcal · ${phase.macros.proteinG}P · ${phase.macros.carbsG}C · ${phase.macros.fatG}F`}
+      </Text>
+
       <Text variant="caption" tone="tertiary" style={styles.story} numberOfLines={3}>
         {phase.story}
       </Text>
@@ -138,6 +145,9 @@ const SQUARE = 9;
 const styles = StyleSheet.create({
   projection: {
     marginTop: spacing.xs,
+  },
+  macros: {
+    marginTop: 2,
   },
   story: {
     marginTop: spacing.xs,
