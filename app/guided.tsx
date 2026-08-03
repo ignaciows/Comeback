@@ -20,6 +20,7 @@ import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseStages } from '@/features/training/ExerciseStages';
+import { WarmupCard } from '@/features/training/WarmupCard';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { Stepper } from '@/features/training/Stepper';
 import { BottomSheet } from '@/components/BottomSheet';
@@ -66,6 +67,8 @@ export default function GuidedScreen() {
   const [restUntil, setRestUntil] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [picking, setPicking] = useState(false);
+  // The warm-up is a step of the session, not a screen you have to find.
+  const [warmedUp, setWarmedUp] = useState(false);
   const [swapping, setSwapping] = useState(false);
   const [chosenSwap, setChosenSwap] = useState<string | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
@@ -192,6 +195,22 @@ export default function GuidedScreen() {
           </Text>
           <TextButton label="Back" onPress={() => router.back()} />
         </View>
+      </Screen>
+    );
+  }
+
+  // ---- Warm up first ------------------------------------------------------
+  // Guided mode is the default way in, and the warm-up used to live only in
+  // the list view — so the ramp the plan is built around was invisible to
+  // almost everyone. It is a step here, before the first heavy set, and it
+  // steps aside for good once anything has been logged.
+  if (!warmedUp && progress.setsDone === 0 && session.exercises.length > 0) {
+    return (
+      <Screen bottomInset={spacing.xxl}>
+        <Label style={styles.warmupKicker}>Before the first set</Label>
+        <WarmupCard session={session} history={sessions} />
+        <PrimaryButton label="Warmed up — start lifting" onPress={() => setWarmedUp(true)} />
+        <TextButton label="Skip the warm-up" onPress={() => setWarmedUp(true)} style={styles.warmupSkip} />
       </Screen>
     );
   }
@@ -577,6 +596,12 @@ function SessionBarTop({
 }
 
 const styles = StyleSheet.create({
+  warmupKicker: {
+    marginBottom: spacing.md,
+  },
+  warmupSkip: {
+    marginTop: spacing.md,
+  },
   centre: {
     flex: 1,
     alignItems: 'center',
