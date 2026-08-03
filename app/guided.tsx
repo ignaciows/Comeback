@@ -18,7 +18,8 @@ import { EQUIPMENT_LABELS, exerciseName, findSubstitutions, getExercise } from '
 import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
-import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
+import { scoreLine, sessionScore } from '@/domain/training/sessionScore';
+import type { WorkoutExercise, WorkoutSession, WorkoutSet } from '@/domain/types';
 import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { exerciseArt } from '@/features/training/exerciseArt';
 import { WarmupCard } from '@/features/training/WarmupCard';
@@ -607,7 +608,7 @@ function SessionBarTop({
   progress,
   onClose,
 }: {
-  session: { exercises: WorkoutExercise[] };
+  session: WorkoutSession;
   progress: ReturnType<typeof sessionProgress>;
   onClose: () => void;
 }) {
@@ -616,10 +617,10 @@ function SessionBarTop({
     opacity: progress.isPaused ? 0.4 : 0.5 + Math.sin(beat.value * Math.PI) * 0.5,
   }));
 
-  // One segment per working set of the session, filled as they are done.
-  const segments = session.exercises
-    .filter((exercise) => !exercise.skipped)
-    .flatMap((exercise) => exercise.sets.filter((entry) => !entry.warmup));
+  // Una casilla por serie, agrupadas por ejercicio. Antes se descartaban los
+  // saltados, así que saltar uno encogía la barra en vez de enseñarlo — y
+  // entonces el total no cuadraba y no había forma de saber por qué.
+  const score = sessionScore(session as WorkoutSession, exerciseName);
 
   return (
     <View style={styles.top}>
@@ -639,19 +640,45 @@ function SessionBarTop({
       </View>
 
       <View style={styles.segments}>
-        {segments.map((entry: WorkoutSet, index: number) => (
-          <View
-            key={entry.id}
-            style={[styles.segment, entry.completed ? styles.segmentDone : null]}
-            accessibilityLabel={`Set ${index + 1}`}
-          />
+        {score.blocks.map((block) => (
+          // El ancho de cada grupo va con sus series, para que la barra
+          // siga cubriendo el ancho entero y un ejercicio de cuatro se vea
+          // más largo que uno de dos.
+          <View key={block.id} style={[styles.group, { flex: Math.max(1, block.cells.length) }]}>
+            {block.cells.map((cell, index) => (
+              <View
+                key={`${block.id}-${index}`}
+                style={[
+                  styles.segment,
+                  cell === 'done' ? styles.segmentDone : null,
+                  cell === 'skipped' ? styles.segmentSkipped : null,
+                ]}
+              />
+            ))}
+          </View>
         ))}
       </View>
+
+      <Text variant="caption" tone="tertiary" style={styles.scoreLine}>
+        {scoreLine(score)}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  group: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  segmentSkipped: {
+    backgroundColor: 'transparent',
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.borderStrong,
+  },
+  scoreLine: {
+    marginTop: spacing.xs,
+  },
   gear: {
     marginTop: spacing.md,
     gap: spacing.xs,
