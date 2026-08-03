@@ -14,7 +14,7 @@ import { Label, Text } from '@/design-system/Text';
 import { motion, useLoop } from '@/design-system/motion';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { cuesFor } from '@/data/coachingCues';
-import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
+import { EQUIPMENT_LABELS, exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
 import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
@@ -354,6 +354,13 @@ export default function GuidedScreen() {
   // ---- The set in front of you --------------------------------------------
   const totalSets = current.exercise.sets.length;
 
+  // Sólo las que el gimnasio tiene, y como mucho tres: una lista larga aquí
+  // sería otra decisión que tomar entre series, que es justo lo que esta
+  // pantalla existe para evitar.
+  const alternatives = findSubstitutions(current.exercise.exerciseId, equipment)
+    .filter((option) => option.availableHere)
+    .slice(0, 3);
+
   return (
     <Screen>
       <SessionBarTop session={session} progress={progress} onClose={() => router.back()} />
@@ -391,6 +398,45 @@ export default function GuidedScreen() {
             {`Your plan: ${totalSets} × ${prescription.repMin}–${prescription.repMax} reps`}
           </Text>
         </View>
+
+        {/* La máquina y con qué se cambia, a la vista. Estaba detrás de
+            «Machine taken», que sólo se pulsa cuando ya llegaste al aparato y
+            estaba ocupado — para entonces ya cruzaste el gimnasio. Verlo antes
+            es lo que te deja elegir la fila más corta. */}
+        {meta && meta.equipment.length > 0 ? (
+          <View style={styles.gear}>
+            <View style={styles.gearRow}>
+              <Icon name="gym" size={13} color={colors.textTertiary} />
+              <Text variant="caption" tone="secondary">
+                {meta.equipment.map((item) => EQUIPMENT_LABELS[item] ?? item).join(' · ')}
+              </Text>
+            </View>
+
+            {alternatives.length > 0 ? (
+              <View style={styles.swaps}>
+                <Text variant="caption" tone="tertiary">
+                  If it is taken:
+                </Text>
+                {alternatives.map((option) => (
+                  <Pressable
+                    key={option.exercise.id}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      substituteExercise(session.id, current.exercise.id, option.exercise.id);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Swap to ${option.exercise.name}`}
+                    style={({ pressed }) => [styles.swapChip, pressed && { opacity: opacity.pressed }]}
+                  >
+                    <Text variant="caption" tone="accent">
+                      {option.exercise.name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
 
         {/* One thing to think about. Never a list. */}
         {cue ? (
@@ -596,6 +642,30 @@ function SessionBarTop({
 }
 
 const styles = StyleSheet.create({
+  gear: {
+    marginTop: spacing.md,
+    gap: spacing.xs,
+  },
+  gearRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  swaps: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  swapChip: {
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.border,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
   warmupKicker: {
     marginBottom: spacing.md,
   },
