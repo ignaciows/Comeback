@@ -154,9 +154,16 @@ function combine(components: FuelComponents): number | null {
 
 function determineConfidence(input: FuelInput, components: FuelComponents): Confidence {
   const present = (Object.values(components) as (number | null)[]).filter((value) => value !== null).length;
+  // Same window the score itself uses, lower bound included. Without `>= 0` a
+  // point dated tomorrow — MIKUY writing ahead, or a timezone rolling the date
+  // over — counted towards confidence in data the score never read, so the app
+  // reported itself as certain on the strength of a meal nobody had eaten.
   const nutritionDays = new Set(
     input.nutrition
-      .filter((point) => daysBetween(point.date, input.date) < fuelConfig.nutrition.windowDays)
+      .filter((point) => {
+        const age = daysBetween(point.date, input.date);
+        return age >= 0 && age < fuelConfig.nutrition.windowDays;
+      })
       .map((point) => point.date),
   ).size;
 

@@ -138,10 +138,32 @@ export function calculateReadiness(
   };
 }
 
-export function readinessLabel(score: number | null): string {
+/**
+ * A word for the score.
+ *
+ * `vsBaseline` is not optional decoration: without it the label can only speak
+ * in absolutes, and it must not then borrow the language of a comparison it
+ * did not make. The old version returned "Below baseline" for anything from 35
+ * to 55 regardless of what the person's baseline actually was — someone whose
+ * own baseline is 40 and who scores 45 was told they were below it, which is
+ * the opposite of true and reads as the app knowing something it does not.
+ *
+ * Once there is a baseline, the comparison is the honest thing to report:
+ * against yourself, a 45 is only low if your normal is higher.
+ */
+const BASELINE_MARGIN = 8;
+
+export function readinessLabel(score: number | null, vsBaseline: number | null = null): string {
   if (score === null) return 'Not logged';
+
+  if (vsBaseline !== null) {
+    if (vsBaseline <= -BASELINE_MARGIN) return 'Below your usual';
+    if (vsBaseline >= BASELINE_MARGIN) return 'Above your usual';
+    return 'Around your usual';
+  }
+
   if (score >= 75) return 'High';
   if (score >= 55) return 'Normal';
-  if (score >= 35) return 'Below baseline';
-  return 'Low';
+  if (score >= 35) return 'Low';
+  return 'Very low';
 }

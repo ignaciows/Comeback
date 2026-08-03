@@ -211,7 +211,11 @@ export default function TodayScreen() {
           <NavRow
             label="Check-in"
             icon="sleep"
-            value={checkin && readiness.score !== null ? readinessLabel(readiness.score) : 'Not logged'}
+            value={
+              checkin && readiness.score !== null
+                ? readinessLabel(readiness.score, readiness.vsBaseline)
+                : 'Not logged'
+            }
             tone={checkin ? 'neutral' : 'warning'}
             dot={!checkin}
             onPress={() => router.push('/checkin')}

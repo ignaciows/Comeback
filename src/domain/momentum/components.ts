@@ -103,7 +103,19 @@ export function calculateConsistencyScore(
   const shortRatio = clamp(shortCount / target, 0, consistency.maxRatio);
   const longRatio = clamp(longCount / (target * 4), 0, consistency.maxRatio);
 
-  const blocks = weeklyCounts(sessions, reference, 4);
+  // Only the weeks the user has actually existed for. Measuring variability
+  // over four blocks regardless meant someone two weeks in was scored against
+  // [4, 4, 0, 0] — docked for the fortnight before they installed the app,
+  // which is the one stretch they could not have trained in.
+  const first = sessions.reduce<ISODate | null>(
+    (earliest, session) => (!earliest || session.date < earliest ? session.date : earliest),
+    null,
+  );
+  const weeksAvailable = first
+    ? clamp(Math.ceil((daysBetween(first, reference) + 1) / 7), 1, 4)
+    : 4;
+
+  const blocks = weeklyCounts(sessions, reference, weeksAvailable);
   const streakThreshold = Math.max(1, Math.round(target * 0.6));
   let streak = 0;
   for (const count of blocks) {
@@ -218,8 +230,14 @@ export function calculateLoggingScore(
   targetSessionsPerWeek: number,
 ): number {
   const days = momentumConfig.windows.loggingDays;
+  // A check-in that scored nothing is not a check-in. Counting the date alone
+  // meant opening the screen and saving an empty form scored exactly the same
+  // as filling it in — and every other component here already ignores those
+  // points, so logging was crediting days the models could not use.
   const checkinDays = new Set(
-    readiness.filter((point) => withinWindow(point.date, reference, days)).map((point) => point.date),
+    readiness
+      .filter((point) => point.score !== null && withinWindow(point.date, reference, days))
+      .map((point) => point.date),
   ).size;
   const checkinCoverage = clamp(checkinDays / days, 0, 1);
 

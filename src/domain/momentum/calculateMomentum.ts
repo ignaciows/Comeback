@@ -109,17 +109,23 @@ export function momentumStateLabel(state: MomentumStateId): string {
 
 function determineConfidence(input: MomentumInput): Confidence {
   const { confidence } = momentumConfig;
+  // `age >= 0` matters: without it anything dated in the future counts as
+  // history, and confidence is the one number that must never be inflated by
+  // data the components themselves refuse to read.
+  const inWindow = (date: ISODate) => {
+    const age = daysBetween(date, input.date);
+    return age >= 0 && age < 28;
+  };
+
   const dataDays = new Set([
-    ...input.sessions
-      .filter((session) => daysBetween(session.date, input.date) < 28)
-      .map((session) => session.date),
+    ...input.sessions.filter((session) => inWindow(session.date)).map((session) => session.date),
     ...input.readiness
-      .filter((point) => point.score !== null && daysBetween(point.date, input.date) < 28)
+      .filter((point) => point.score !== null && inWindow(point.date))
       .map((point) => point.date),
   ]).size;
 
   const checkins = input.readiness.filter(
-    (point) => point.score !== null && daysBetween(point.date, input.date) < 28,
+    (point) => point.score !== null && inWindow(point.date),
   ).length;
 
   if (dataDays >= confidence.highDays && checkins >= confidence.highCheckins) return 'high';
