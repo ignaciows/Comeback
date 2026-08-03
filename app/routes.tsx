@@ -10,6 +10,7 @@ import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { recommendRoute, simulateAllRoutes, type RouteInput } from '@/domain/plan/routes';
+import { routeOutlook } from '@/domain/plan/outlook';
 import { RouteChart } from '@/features/plan/RouteChart';
 import { useBodyWeightSeries } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -68,6 +69,13 @@ export default function RoutesScreen() {
   // One shared y-range so the curves can be compared directly.
   const allWeights = simulations.flatMap((simulation) => simulation.points.map((point) => point.weightKg));
   const domain: [number, number] = [Math.min(...allWeights) - 0.5, Math.max(...allWeights) + 0.5];
+
+  const outlooks = Object.fromEntries(
+    simulations.map((simulation) => [
+      simulation.route.id,
+      routeOutlook(simulation, goal?.objective ?? 'build'),
+    ]),
+  );
 
   const ordered = [...simulations].sort((a, b) =>
     a.route.id === recommendation?.routeId ? -1 : b.route.id === recommendation?.routeId ? 1 : 0,
@@ -145,9 +153,45 @@ export default function RoutesScreen() {
                   <Stat label="Ends at" value={`${simulation.endWeightKg} kg`} />
                 </View>
 
-                <Text variant="caption" tone="tertiary" style={styles.cardFoot}>
-                  {`Done around ${formatLongDate(simulation.endDate)}`}
-                </Text>
+                {/* Las paradas con fecha. «Ocho kilos en dos años» no se
+                    puede sentir; «para abril pesas 79 al 17 %» sí, porque
+                    abril llega. */}
+                {outlooks[simulation.route.id] ? (
+                  <View style={styles.stops}>
+                    {outlooks[simulation.route.id].milestones.map((stop) => (
+                      <View key={stop.week} style={styles.stop}>
+                        <Text variant="caption" tone="tertiary">
+                          {stop.away}
+                        </Text>
+                        <Text variant="bodySmall" mono>
+                          {`${stop.weightKg} kg`}
+                        </Text>
+                        <Text variant="caption" tone="accent" mono>
+                          {`+${stop.muscleKg}`}
+                        </Text>
+                        {stop.bodyFatPercent !== null ? (
+                          <Text variant="caption" tone="tertiary" mono>
+                            {`${stop.bodyFatPercent}%`}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                {/* El precio, en sesiones. Sin esto la que más promete gana
+                    siempre, y la que más promete es siempre la más larga. */}
+                {outlooks[simulation.route.id] ? (
+                  <Text variant="caption" tone="tertiary" style={styles.cardFoot}>
+                    {`${outlooks[simulation.route.id].sessionsPerWeek}× a week · ${
+                      outlooks[simulation.route.id].totalSessions
+                    } sessions · done around ${formatLongDate(simulation.endDate)}`}
+                  </Text>
+                ) : (
+                  <Text variant="caption" tone="tertiary" style={styles.cardFoot}>
+                    {`Done around ${formatLongDate(simulation.endDate)}`}
+                  </Text>
+                )}
               </Pressable>
             </Reveal>
           );
@@ -188,6 +232,17 @@ function Stat({ label, value, accent = false }: { label: string; value: string; 
 }
 
 const styles = StyleSheet.create({
+  stops: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  stop: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 1,
+  },
   recommendation: {
     padding: spacing.lg,
     borderRadius: radius.lg,
