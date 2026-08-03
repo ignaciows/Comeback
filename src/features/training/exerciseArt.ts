@@ -31,10 +31,16 @@ export const EXERCISE_ART: Record<string, ImageSourcePropType> = {
   back_squat: require('../../../assets/exercises/back_squat.webp'),
   barbell_bench_press: require('../../../assets/exercises/barbell_bench_press.webp'),
   barbell_row: require('../../../assets/exercises/barbell_row.webp'),
+  bulgarian_split_squat: require('../../../assets/exercises/bulgarian_split_squat.webp'),
   deadlift: require('../../../assets/exercises/deadlift.webp'),
   dumbbell_curl: require('../../../assets/exercises/dumbbell_curl.webp'),
+  hip_thrust: require('../../../assets/exercises/hip_thrust.webp'),
+  lateral_raise: require('../../../assets/exercises/lateral_raise.webp'),
+  leg_extension: require('../../../assets/exercises/leg_extension.webp'),
   overhead_press: require('../../../assets/exercises/overhead_press.webp'),
+  plank: require('../../../assets/exercises/plank.webp'),
   pull_up: require('../../../assets/exercises/pull_up.webp'),
+  seated_leg_curl: require('../../../assets/exercises/seated_leg_curl.webp'),
 };
 
 /**
@@ -64,6 +70,9 @@ const FALLBACK: Record<string, string> = {
   chest_supported_row: 'barbell_row',
   romanian_deadlift: 'deadlift',
   trap_bar_deadlift: 'deadlift',
+  cable_lateral_raise: 'lateral_raise',
+  lying_leg_curl: 'seated_leg_curl',
+  walking_lunge: 'bulgarian_split_squat',
 };
 
 export function exerciseArt(id: string): ImageSourcePropType | null {
