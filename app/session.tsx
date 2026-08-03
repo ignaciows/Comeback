@@ -24,6 +24,8 @@ import { RestTimer } from '@/features/training/RestTimer';
 import { SessionBar } from '@/features/training/SessionBar';
 import { SetRow } from '@/features/training/SetRow';
 import { WarmupCard } from '@/features/training/WarmupCard';
+import { ExerciseCollapsed } from '@/features/training/ExerciseCollapsed';
+import { focusLabel, sessionFocus } from '@/domain/training/sessionFocus';
 import { sessionProgress } from '@/domain/training/sessionProgress';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -68,6 +70,9 @@ export default function SessionScreen() {
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
+  // Exercises the user opened by hand, on top of the one that is live.
+  const [opened, setOpened] = useState<Set<string>>(() => new Set());
+  const [showTools, setShowTools] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session || session.status !== 'active') return;
@@ -99,6 +104,9 @@ export default function SessionScreen() {
       ) ?? 0,
     [session],
   );
+
+  // Which movement is live, and what the rest can shrink to.
+  const focus = useMemo(() => (session ? sessionFocus(session) : null), [session]);
 
   if (!session) {
     return (
@@ -148,7 +156,9 @@ export default function SessionScreen() {
         subtitle={
           readOnly
             ? formatShortDate(session.date)
-            : `${formatDuration(elapsed)} · ${completedSets} set${completedSets === 1 ? '' : 's'} logged`
+            // What is left, not what has been done. "3 of 6" answers how much
+            // more there is; a running set count only says how busy you were.
+            : `${formatDuration(elapsed)} · ${focus ? focusLabel(focus) : ''}`
         }
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
         trailing={
@@ -211,9 +221,41 @@ export default function SessionScreen() {
       {session.exercises.map((exercise, index) => {
         const previous = previousPerformance(sessions, exercise.exerciseId, session.id);
         const meta = getExercise(exercise.exerciseId);
+        const item = focus?.items.find((entry) => entry.id === exercise.id);
+
+        // One exercise is open: the live one. A finished session opens none,
+        // and anything the user taps opens on top of that.
+        const expanded = readOnly || opened.has(exercise.id) || item?.state === 'current';
+
+        if (!expanded && item) {
+          return (
+            <ExerciseCollapsed
+              key={exercise.id}
+              item={item}
+              onPress={() => setOpened((current) => new Set(current).add(exercise.id))}
+            />
+          );
+        }
+
         return (
           <Section key={exercise.id} style={exercise.skipped ? styles.skipped : undefined}>
             <View style={styles.exerciseHead}>
+              {/* Opened by hand, so it can be put back. The live exercise has
+                  no collapse: hiding the thing you are doing is never useful. */}
+              {opened.has(exercise.id) && item?.state !== 'current' ? (
+                <IconButton
+                  icon="close"
+                  label="Collapse"
+                  size={16}
+                  onPress={() =>
+                    setOpened((current) => {
+                      const next = new Set(current);
+                      next.delete(exercise.id);
+                      return next;
+                    })
+                  }
+                />
+              ) : null}
               <Pressable
                 onPress={() => setGuiding(exercise.exerciseId)}
                 accessibilityRole="button"
@@ -223,6 +265,13 @@ export default function SessionScreen() {
                 <View style={styles.exerciseTitleRow}>
                   <Text variant="heading">{exerciseName(exercise.exerciseId)}</Text>
                   <Icon name="info" size={14} color={colors.textTertiary} />
+                  {/* Where you are, next to what you are doing — the two halves
+                      of the only question you have between sets. */}
+                  {item && !readOnly ? (
+                    <Text variant="caption" mono tone="tertiary">
+                      {`${item.setsDone}/${item.setsPlanned}`}
+                    </Text>
+                  ) : null}
                 </View>
                 <Text variant="caption" tone="tertiary">
                   {previous
@@ -235,8 +284,23 @@ export default function SessionScreen() {
                   </Text>
                 ) : null}
               </Pressable>
-              {!readOnly ? (
+              {!readOnly && showTools !== exercise.id ? (
+                <IconButton
+                  icon="chevronDown"
+                  label="Exercise options"
+                  size={16}
+                  onPress={() => setShowTools(exercise.id)}
+                />
+              ) : null}
+
+              {!readOnly && showTools === exercise.id ? (
                 <View style={styles.exerciseActions}>
+                  <IconButton
+                    icon="close"
+                    label="Hide options"
+                    size={16}
+                    onPress={() => setShowTools(null)}
+                  />
                   <IconButton
                     icon={exercise.skipped ? 'plus' : 'minus'}
                     label={exercise.skipped ? 'Put it back' : 'Not doing this one'}
