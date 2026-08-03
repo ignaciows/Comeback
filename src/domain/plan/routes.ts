@@ -25,6 +25,11 @@ import {
  * place. This simulates each one week by week so the difference is visible
  * rather than argued about.
  *
+ * No route is shorter than about five months. A twelve-week plan ends a
+ * fortnight after the point where the training starts being visible, which
+ * means it is over exactly when it begins to work — and then the number the
+ * plan screen counts down to is a date that arrives before the result does.
+ *
  * The whole thing is deterministic: same inputs, same curve.
  */
 
@@ -49,46 +54,46 @@ export const ROUTES: PlanRoute[] = [
   {
     id: 'bulk_then_cut',
     name: 'Build first, then cut',
-    summary: 'Three months adding size, then two months taking the fat back off.',
+    summary: 'Four months adding size, then ten weeks taking the fat back off.',
     bestFor: 'Already fairly lean and want visible size as fast as it is worth doing.',
     blocks: [
-      { strategy: 'bulk', weeks: 12, label: 'Build' },
-      { strategy: 'cut', weeks: 8, label: 'Cut' },
+      { strategy: 'bulk', weeks: 16, label: 'Build' },
+      { strategy: 'cut', weeks: 10, label: 'Cut' },
     ],
   },
   {
     id: 'lean_bulk_then_short_cut',
     name: 'Lean build, short cut',
-    summary: 'Four months gaining slowly, then six weeks to sharpen up.',
+    summary: 'Six months gaining slowly, then two to sharpen up.',
     bestFor: 'You want size without ever getting far from lean.',
     blocks: [
-      { strategy: 'lean_bulk', weeks: 16, label: 'Lean build' },
-      { strategy: 'lean_cut', weeks: 6, label: 'Sharpen' },
+      { strategy: 'lean_bulk', weeks: 24, label: 'Lean build' },
+      { strategy: 'lean_cut', weeks: 8, label: 'Sharpen' },
     ],
   },
   {
     id: 'lean_bulk_straight',
     name: 'Lean build, no cut',
-    summary: 'Gain slowly and stay lean the whole way. Takes the longest.',
+    summary: 'Ten months gaining slowly, lean the whole way. No cut at the end.',
     bestFor: 'You never want to look worse than you do today.',
-    blocks: [{ strategy: 'lean_bulk', weeks: 32, label: 'Lean build' }],
+    blocks: [{ strategy: 'lean_bulk', weeks: 44, label: 'Lean build' }],
   },
   {
     id: 'cut_then_build',
     name: 'Cut first, then build',
-    summary: 'Take the fat off first, then spend four months building on a lean base.',
+    summary: 'Three months taking fat off, then six months building on a lean base.',
     bestFor: 'Carrying enough fat that gaining now would mostly add more.',
     blocks: [
-      { strategy: 'cut', weeks: 10, label: 'Cut' },
-      { strategy: 'lean_bulk', weeks: 16, label: 'Build' },
+      { strategy: 'cut', weeks: 12, label: 'Cut' },
+      { strategy: 'lean_bulk', weeks: 24, label: 'Build' },
     ],
   },
   {
     id: 'recomp',
     name: 'Recomposition',
-    summary: 'Hold your weight and let training change what it is made of.',
+    summary: 'Seven months holding your weight while training changes what it is made of.',
     bestFor: 'Returning to training, where muscle comes back without a surplus.',
-    blocks: [{ strategy: 'maintain', weeks: 20, label: 'Recomp' }],
+    blocks: [{ strategy: 'maintain', weeks: 28, label: 'Recomp' }],
   },
   {
     id: 'year_of_building',

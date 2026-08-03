@@ -131,20 +131,34 @@ describe('route recommendation', () => {
 
 describe('block progression', () => {
   it('knows which block you are in', () => {
+    // Read off the route rather than hardcoded, so lengthening a block does
+    // not turn this into a test of the old numbers.
     const route = getRoute('bulk_then_cut')!;
+    const [first, second] = route.blocks;
+    const total = first.weeks + second.weeks;
+
     expect(currentBlock(route, 0)?.index).toBe(0);
-    expect(currentBlock(route, 11)?.index).toBe(0);
-    expect(currentBlock(route, 12)?.index).toBe(1);
-    expect(currentBlock(route, 19)?.index).toBe(1);
+    expect(currentBlock(route, first.weeks - 1)?.index).toBe(0);
+    expect(currentBlock(route, first.weeks)?.index).toBe(1);
+    expect(currentBlock(route, total - 1)?.index).toBe(1);
     // Past the end of the route.
-    expect(currentBlock(route, 20)).toBeNull();
+    expect(currentBlock(route, total)).toBeNull();
   });
 
   it('counts how far into a block you are', () => {
     const route = getRoute('bulk_then_cut')!;
-    const position = currentBlock(route, 14);
+    const position = currentBlock(route, route.blocks[0].weeks + 2);
     expect(position?.weeksIntoBlock).toBe(2);
     expect(position?.block.strategy).toBe('cut');
+  });
+
+  it('never offers a plan that ends before it starts working', () => {
+    // Visible change takes roughly nine weeks of consistent training. A plan
+    // that finishes at twelve is over the moment it begins to work.
+    for (const route of ROUTES) {
+      const weeks = route.blocks.reduce((total, block) => total + block.weeks, 0);
+      expect(weeks, route.id).toBeGreaterThanOrEqual(20);
+    }
   });
 });
 

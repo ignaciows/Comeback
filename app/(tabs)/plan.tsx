@@ -17,6 +17,7 @@ import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
+import { feelLine, planMilestones } from '@/domain/plan/milestones';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
 import { PhaseGrid } from '@/features/plan/PhaseGrid';
@@ -51,6 +52,25 @@ export default function PlanTab() {
 
   const { projection, volume, routeProgress, drift, verdict, commitments, ramp, weeklyTarget, phases } = engine;
   const strategy = goal ? strategyProfile(goal.strategy) : null;
+
+  // Three countdowns, largest first. "Days to your target" was the truth and
+  // also the least motivating true thing available — nobody gets out of bed
+  // for a date in September.
+  const currentPhase = phases.find((phase) => phase.state === 'current') ?? null;
+  const milestones = useMemo(
+    () =>
+      planMilestones({
+        today: todayOf(),
+        goalStartedAt: goal?.startedAt ?? todayOf(),
+        adherence: engine.adherenceRate,
+        weeklyRateKg: projection?.weeklyRateKg ?? 0,
+        currentWeightKg: [...measurements].sort((a, b) => (a.date < b.date ? 1 : -1))[0]?.weightKg ?? 0,
+        phaseEndsOn: currentPhase?.endsOn ?? null,
+        phaseLabel: currentPhase?.label ?? null,
+        planEndsOn: phases[phases.length - 1]?.endsOn ?? projection?.targetDate ?? null,
+      }),
+    [goal?.startedAt, engine.adherenceRate, projection, measurements, currentPhase, phases],
+  );
   const focus = goal?.muscleFocus ?? [];
   const weekStart = startOfWeek(todayOf());
 
@@ -149,17 +169,40 @@ export default function PlanTab() {
             </Text>
           </View>
 
-          <Label style={styles.heroLabel}>Days to your target</Label>
+          <Label style={styles.heroLabel}>{milestones[0].label}</Label>
 
           <View style={styles.heroValue}>
-            <AnimatedNumber value={projection?.daysRemaining ?? null} variant="display" style={styles.heroNumber} />
+            <AnimatedNumber value={milestones[0].days} variant="display" style={styles.heroNumber} />
           </View>
 
           <Text variant="body" tone="secondary">
-            {projection?.targetDate
-              ? formatLongDate(projection.targetDate)
-              : 'Set a target and this counts down to it.'}
+            {milestones[0].detail}
           </Text>
+
+          {/* Strength arrives before the mirror does, and saying so is what
+              keeps the first six weeks from feeling like nothing is happening. */}
+          <Text variant="caption" tone="tertiary" style={styles.heroFeel}>
+            {feelLine({
+              today: todayOf(),
+              goalStartedAt: goal?.startedAt ?? todayOf(),
+              adherence: engine.adherenceRate,
+            })}
+          </Text>
+
+          {/* The two longer horizons, quiet underneath. They are the ones the
+              screen used to lead with. */}
+          <View style={styles.horizons}>
+            {milestones.slice(1).map((entry) => (
+              <View key={entry.key} style={styles.horizon}>
+                <Text variant="metricSmall" mono tone={entry.days === null ? 'tertiary' : 'primary'}>
+                  {entry.days === null ? '—' : String(entry.days)}
+                </Text>
+                <Text variant="caption" tone="tertiary" numberOfLines={2}>
+                  {entry.label.replace('Days left in ', '').replace('Days to finish the ', '')}
+                </Text>
+              </View>
+            ))}
+          </View>
         </View>
       </Reveal>
 
@@ -411,6 +454,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: spacing.xl,
+  },
+  heroFeel: {
+    marginTop: spacing.sm,
+  },
+  horizons: {
+    flexDirection: 'row',
+    gap: spacing.xl,
+    marginTop: spacing.lg,
+    paddingTop: spacing.lg,
+    borderTopWidth: borderWidth.hairline,
+    borderTopColor: colors.border,
+  },
+  horizon: {
+    flex: 1,
+    gap: 2,
   },
   heroHead: {
     flexDirection: 'row',
