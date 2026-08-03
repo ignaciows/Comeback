@@ -34,13 +34,18 @@ export const EXERCISE_ART: Record<string, ImageSourcePropType> = {
   bulgarian_split_squat: require('../../../assets/exercises/bulgarian_split_squat.webp'),
   deadlift: require('../../../assets/exercises/deadlift.webp'),
   dumbbell_curl: require('../../../assets/exercises/dumbbell_curl.webp'),
+  dumbbell_fly: require('../../../assets/exercises/dumbbell_fly.webp'),
+  face_pull: require('../../../assets/exercises/face_pull.webp'),
+  hanging_leg_raise: require('../../../assets/exercises/hanging_leg_raise.webp'),
   hip_thrust: require('../../../assets/exercises/hip_thrust.webp'),
   lateral_raise: require('../../../assets/exercises/lateral_raise.webp'),
   leg_extension: require('../../../assets/exercises/leg_extension.webp'),
   overhead_press: require('../../../assets/exercises/overhead_press.webp'),
   plank: require('../../../assets/exercises/plank.webp'),
   pull_up: require('../../../assets/exercises/pull_up.webp'),
+  rear_delt_fly: require('../../../assets/exercises/rear_delt_fly.webp'),
   seated_leg_curl: require('../../../assets/exercises/seated_leg_curl.webp'),
+  triceps_pushdown: require('../../../assets/exercises/triceps_pushdown.webp'),
 };
 
 /**
@@ -73,6 +78,9 @@ const FALLBACK: Record<string, string> = {
   cable_lateral_raise: 'lateral_raise',
   lying_leg_curl: 'seated_leg_curl',
   walking_lunge: 'bulgarian_split_squat',
+  cable_fly: 'dumbbell_fly',
+  pec_deck: 'dumbbell_fly',
+  overhead_triceps_extension: 'triceps_pushdown',
 };
 
 export function exerciseArt(id: string): ImageSourcePropType | null {

@@ -12,7 +12,12 @@ import { EXERCISES } from '@/data/exercises';
  * fallback pointing at a slot with no art. Both fail silently in the app,
  * because a missed lookup just renders nothing at all.
  */
-const SOURCE = readFileSync(new URL('../src/features/training/exerciseArt.ts', import.meta.url), 'utf8');
+// `.pathname` rather than `fileURLToPath`: the project's TS config gives the
+// DOM `URL`, which node:url does not accept as its own.
+const SOURCE = readFileSync(
+  new URL('../src/features/training/exerciseArt.ts', import.meta.url).pathname,
+  'utf8',
+);
 
 const artIds = [...SOURCE.matchAll(/^ {2}(\w+): require\(/gm)].map((match) => match[1]);
 const fallbacks = [...SOURCE.matchAll(/^ {2}(\w+): '(\w+)',$/gm)].map((match) => ({
