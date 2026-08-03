@@ -555,6 +555,8 @@ export function runEngine(input: EngineInput): EngineResult {
     today: input.today,
     sessions: input.sessions,
     simulation: routeSimulation,
+    startWeightKg: latestWeight?.weightKg ?? null,
+    startBodyFatPercent: latestWeight?.bodyFatPercent ?? null,
     fallback:
       projection && projection.targetDate && input.goal
         ? {

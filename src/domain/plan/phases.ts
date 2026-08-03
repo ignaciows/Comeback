@@ -1,6 +1,6 @@
 import type { ISODate, NutritionStrategy, WorkoutSession } from '@/domain/types';
 import { addDays, daysBetween, isWithinDays } from '@/utils/date';
-import { round } from '@/utils/math';
+import { clamp, round } from '@/utils/math';
 import type { RouteSimulation } from './routes';
 import { strategyProfile } from './strategies';
 
@@ -33,6 +33,10 @@ export type PlanPhaseView = {
   weightChangeKg: number;
   leanChangeKg: number;
   fatChangeKg: number;
+  /** What you are projected to weigh when this phase ends. */
+  endWeightKg: number | null;
+  /** Projected body fat at the end of it. Null without a starting reading. */
+  endBodyFatPercent: number | null;
   kcal: number;
   /** What this phase is for, and what it costs. Two sentences at most. */
   story: string;
@@ -81,6 +85,10 @@ function storyFor(
 export type PhaseInput = {
   today: ISODate;
   sessions: WorkoutSession[];
+  /** Weight now. Without it the per-phase projections stay null. */
+  startWeightKg?: number | null;
+  /** Body fat now, from a composition scale. Null is normal. */
+  startBodyFatPercent?: number | null;
   /** The simulated route, when one is being followed. */
   simulation: RouteSimulation | null;
   /** Fallbacks when there is no route: the projection's own horizon. */
@@ -103,21 +111,48 @@ export type PhaseInput = {
  * different ones on top would be worse than useless. It is only the single
  * long stretch that needs breaking up.
  */
-export function buildPhases({ today, sessions, simulation, fallback }: PhaseInput): PlanPhaseView[] {
+export function buildPhases({
+  today,
+  sessions,
+  simulation,
+  fallback,
+  startWeightKg = null,
+  startBodyFatPercent = null,
+}: PhaseInput): PlanPhaseView[] {
   const completed = sessions.filter((session) => session.status === 'completed');
 
   const countSessions = (from: ISODate, to: ISODate) =>
     completed.filter((session) => session.date >= from && session.date <= to).length;
 
+  // Where the body is now. The simulation knows it when there is a route;
+  // otherwise it has to be handed in, and without it the projections stay
+  // null rather than counting up from an assumed weight.
+  const originWeight = startWeightKg ?? simulation?.startWeightKg ?? null;
+  let runningWeight = originWeight;
+  let runningFatKg =
+    originWeight !== null && startBodyFatPercent !== null
+      ? (startBodyFatPercent / 100) * originWeight
+      : null;
+
   const finish = (
-    parts: Omit<PlanPhaseView, 'state' | 'daysDone' | 'sessionsDone' | 'story'>[],
+    parts: Omit<PlanPhaseView, 'state' | 'daysDone' | 'sessionsDone' | 'story' | 'endWeightKg' | 'endBodyFatPercent'>[],
   ): PlanPhaseView[] =>
     parts.map((part, index) => {
       const next = parts[index + 1]?.strategy ?? null;
       const elapsed = daysBetween(part.startsOn, today);
 
+      // Carried forward phase by phase, so each one ends where the next
+      // begins and the numbers down the column tell one continuous story.
+      if (runningWeight !== null) runningWeight = round(runningWeight + part.weightChangeKg, 1);
+      if (runningFatKg !== null) runningFatKg = Math.max(0, runningFatKg + part.fatChangeKg);
+
       return {
         ...part,
+        endWeightKg: runningWeight,
+        endBodyFatPercent:
+          runningWeight !== null && runningFatKg !== null && runningWeight > 0
+            ? round(clamp((runningFatKg / runningWeight) * 100, 2, 60), 1)
+            : null,
         daysDone: Math.max(0, Math.min(part.days, elapsed)),
         sessionsDone: countSessions(part.startsOn, part.endsOn),
         story: storyFor(part.strategy, part.weightChangeKg, part.leanChangeKg, part.fatChangeKg, next),

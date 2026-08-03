@@ -16,6 +16,8 @@ const phase = (patch: Partial<PlanPhaseView> = {}): PlanPhaseView => ({
   index: 0,
   label: 'Build',
   strategy: 'lean_bulk',
+  endWeightKg: null,
+  endBodyFatPercent: null,
   startsOn: '2026-08-01',
   endsOn: '2026-09-12',
   days: 42,

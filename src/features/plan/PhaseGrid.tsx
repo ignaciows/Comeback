@@ -87,6 +87,20 @@ function PhaseBlock({
           </Text>
         </View>
 
+      {/* Where this phase leaves you, and what it is for. The grid answers
+          "how long"; without these it never answers "and then what". */}
+      {phase.endWeightKg !== null ? (
+        <Text variant="caption" tone="secondary" mono style={styles.projection}>
+          {phase.endBodyFatPercent !== null
+            ? `→ ${phase.endWeightKg} kg · ${phase.endBodyFatPercent}% body fat`
+            : `→ ${phase.endWeightKg} kg`}
+        </Text>
+      ) : null}
+
+      <Text variant="caption" tone="tertiary" style={styles.story} numberOfLines={3}>
+        {phase.story}
+      </Text>
+
         <Text variant="caption" tone="tertiary" mono>
           {done ? `${phase.days}d` : `${phase.daysDone}/${phase.days}d`}
         </Text>
@@ -122,6 +136,13 @@ function PhaseBlock({
 const SQUARE = 9;
 
 const styles = StyleSheet.create({
+  projection: {
+    marginTop: spacing.xs,
+  },
+  story: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
   wrap: {
     gap: spacing.md,
   },
