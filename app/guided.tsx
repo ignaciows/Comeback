@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut, useAnimatedStyle } from 'react-native-reanimated';
 
 import { PrimaryButton, SecondaryButton, TextButton } from '@/components/Button';
@@ -20,6 +20,7 @@ import { startingLoad } from '@/domain/training/assessment';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseStages } from '@/features/training/ExerciseStages';
+import { exerciseArt } from '@/features/training/exerciseArt';
 import { WarmupCard } from '@/features/training/WarmupCard';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { Stepper } from '@/features/training/Stepper';
@@ -353,6 +354,7 @@ export default function GuidedScreen() {
 
   // ---- The set in front of you --------------------------------------------
   const totalSets = current.exercise.sets.length;
+  const art = exerciseArt(current.exercise.exerciseId);
 
   // Sólo las que el gimnasio tiene, y como mucho tres: una lista larga aquí
   // sería otra decisión que tomar entre series, que es justo lo que esta
@@ -376,10 +378,18 @@ export default function GuidedScreen() {
           accessibilityLabel={`How to do ${exerciseName(current.exercise.exerciseId)}`}
           style={({ pressed }) => [styles.animation, pressed && { opacity: opacity.pressed }]}
         >
-          <ExerciseStages
-            pattern={meta?.pattern ?? 'isolation'}
-            equipment={meta?.equipment ?? []}
-          />
+          {/* El blueprint del movimiento si lo hay, y si no la animación
+              procedural. Las imágenes existían y sólo se veían en el detalle
+              del ejercicio — o sea, en ninguna parte durante el entreno, que
+              es cuando hace falta ver cómo se hace. */}
+          {art ? (
+            <Image source={art} style={styles.render} resizeMode="contain" />
+          ) : (
+            <ExerciseStages
+              pattern={meta?.pattern ?? 'isolation'}
+              equipment={meta?.equipment ?? []}
+            />
+          )}
         </Pressable>
 
         <Text variant="title" style={styles.name}>
@@ -717,6 +727,12 @@ const styles = StyleSheet.create({
   },
   animation: {
     alignSelf: 'center',
+  },
+  render: {
+    // Llena el hueco que la animación dejaba vacío, sin empujar los
+    // controles fuera de pantalla en un móvil pequeño.
+    width: 260,
+    height: 260,
   },
   name: {
     textAlign: 'center',
