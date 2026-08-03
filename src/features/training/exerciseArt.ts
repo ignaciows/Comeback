@@ -3,25 +3,35 @@ import type { ImageSourcePropType } from 'react-native';
 /**
  * The render of each movement: what the exercise looks like.
  *
- * A grey mannequin performing the lift. Not a photo of a person — a photo
- * invites you to compare bodies, and a body is not the information. What you
- * need is the shape of the movement.
+ * A flat blueprint diagram of the movement, drawn in the app's own palette:
+ * near-black ground, thin grey outlines, the worked muscles filled in the
+ * accent. Not a photo of a person — a photo invites you to compare bodies,
+ * and a body is not the information. Not a rendered sculpture either: the
+ * rest of the app is flat and 2D, and a marble figure with shadows sitting
+ * inside it reads as borrowed from somewhere else.
  *
- * **The render does not say which muscles are worked, and must not.** That job
- * belongs to `MuscleMap`, which draws its highlight straight from
- * `primaryMuscle` and `secondaryMuscles` and is therefore right by
- * construction. The two used to sit on the same screen both answering that
- * question — one from data, one from a generative model — which is two sources
- * of truth for one fact, and the stochastic one was wrong often enough to
- * matter. Over ten generated renders it lit the pectorals for a lateral raise,
- * the quadriceps for a hip thrust, and the quadriceps again for a deadlift. A
- * diagram that highlights the wrong muscle is worse than no diagram, because
- * people believe the picture over the text.
+ * Generated with Recraft in vector mode, which takes the palette as literal
+ * hex — `#0A0B0D` ground and `#5BE49B` accent are passed as parameters rather
+ * than described in words, so the art cannot drift away from the tokens. It
+ * returns real SVG; the assets are rasterised to webp only because the app
+ * has no SVG asset pipeline yet.
  *
- * So: the picture shows the movement, the map shows the muscles. It also makes
- * the pictures far cheaper to get right — with no anatomy being asserted, the
- * worst a bad render can do is show a plank on the hands instead of the
- * forearms, which is a cosmetic miss rather than a false claim about a body.
+ * Two things the prompt must always carry. Describing a muscle's location in
+ * prose gets that prose drawn into the picture as callout labels, so every
+ * prompt forbids text outright. And the flat idiom earns back the muscle
+ * highlighting that photorealism could not be trusted with: an approximate
+ * green region on a diagram reads as "around here", where the same green on a
+ * rendered thigh read as a precise medical claim.
+ *
+ * That relaxation is narrow, and the reason it is safe is worth keeping. When
+ * these were photoreal, highlighting was wrong most of the time — pectorals
+ * lit for a lateral raise, quadriceps for a hip thrust, quadriceps again for
+ * a deadlift — and a rendered thigh with a glowing muscle is believed over
+ * any text beside it. `MuscleMap` remains the authority: it draws from
+ * `primaryMuscle` and `secondaryMuscles` and is right by construction, and it
+ * is what the exercise screen shows when the question is *which muscles*. The
+ * blueprint's green is illustration of the movement, not the source of truth,
+ * and it still gets looked at before it ships.
  *
  * Static requires, because Metro resolves image assets at build time and a
  * computed path silently yields nothing. An exercise with no entry renders
