@@ -15,6 +15,9 @@ import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
 import { CoachCascade } from '@/features/training/CoachCascade';
 import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
 import { MovementArt } from '@/features/training/MovementArt';
+import { Turntable, hasTurntable } from '@/features/training/Turntable';
+import { ViewCarousel } from '@/features/training/ViewCarousel';
+import { hasViews } from '@/data/movementViews';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
 
@@ -71,8 +74,26 @@ export default function ExerciseDetailScreen() {
       />
 
       {meta ? (
-        <Section title="The movement" footnote={PATTERN_LABELS[meta.pattern]}>
-          <MovementArt exerciseId={meta.id} pattern={meta.pattern} equipment={meta.equipment} />
+        <Section
+          title="The movement"
+          footnote={hasTurntable(meta.id) ? 'Drag it to look from any side' : PATTERN_LABELS[meta.pattern]}
+        >
+          {hasTurntable(meta.id) ? (
+            <Turntable exerciseId={meta.id} />
+          ) : (
+            <MovementArt exerciseId={meta.id} pattern={meta.pattern} equipment={meta.equipment} />
+          )}
+        </Section>
+      ) : null}
+
+      {/*
+        The angles that answer the positional questions — is my back flat, are
+        my elbows in the right place, how deep is deep. Each carries what it
+        shows, because a gallery without captions is decoration.
+      */}
+      {meta && hasViews(meta.id) ? (
+        <Section title="Angles that matter" footnote="What each one is for">
+          <ViewCarousel exerciseId={meta.id} />
         </Section>
       ) : null}
 

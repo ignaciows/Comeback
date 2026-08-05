@@ -28,6 +28,7 @@ import { startingLoad } from '@/domain/training/assessment';
 import { sessionLevels } from '@/domain/training/sessionLevels';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
 import { MovementArt } from '@/features/training/MovementArt';
+import { Turntable, hasTurntable } from '@/features/training/Turntable';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { LevelTrack } from '@/features/training/LevelTrack';
 import { Stepper } from '@/features/training/Stepper';
@@ -490,11 +491,18 @@ export default function GuidedScreen() {
           accessibilityLabel={`How to do ${exerciseName(current.exercise.exerciseId)}`}
           style={({ pressed }) => [styles.animation, pressed && { opacity: opacity.pressed }]}
         >
-          <MovementArt
-            exerciseId={current.exercise.exerciseId}
-            pattern={meta?.pattern ?? 'isolation'}
-            equipment={meta?.equipment ?? []}
-          />
+          {/* Where there is a full turn rendered, the movement is something
+              you can spin rather than something you look at. Tapping still
+              opens the detail screen; the drag is handled before the press. */}
+          {hasTurntable(current.exercise.exerciseId) ? (
+            <Turntable exerciseId={current.exercise.exerciseId} />
+          ) : (
+            <MovementArt
+              exerciseId={current.exercise.exerciseId}
+              pattern={meta?.pattern ?? 'isolation'}
+              equipment={meta?.equipment ?? []}
+            />
+          )}
         </Pressable>
 
         <Text variant="title" style={styles.name}>

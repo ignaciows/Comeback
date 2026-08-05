@@ -5,7 +5,7 @@ import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { coachCascade } from '@/domain/training/coachCascade';
-import { MuscleMap } from '@/features/training/MuscleMap';
+import { AnatomyMap } from '@/features/training/AnatomyMap';
 
 /**
  * The lift, top to bottom, with a reason attached to every part of it.
@@ -47,13 +47,9 @@ export function CoachCascade({ exerciseId }: { exerciseId: string }) {
                 {stage.why}
               </Text>
 
-              {stage.showsMuscles && stage.primaryMuscle ? (
+              {stage.showsMuscles ? (
                 <View style={styles.muscles}>
-                  <MuscleMap
-                    primary={stage.primaryMuscle}
-                    secondary={stage.secondaryMuscles ?? []}
-                    height={170}
-                  />
+                  <AnatomyMap exerciseId={exerciseId} height={200} />
                 </View>
               ) : null}
 
