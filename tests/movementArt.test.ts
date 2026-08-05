@@ -38,35 +38,19 @@ describe('rendered movement art', () => {
     }
   });
 
-  it('covers the movements the diagram serves worst', () => {
-    // These are the ones whose difficulty is entirely the setup — which
-    // machine, which pad against which limb. A stick figure cannot tell a
-    // seated calf raise from a leg press, and those are the ones people get
-    // wrong.
-    const keys = artKeys();
+  it('covers all but the one that could not be drawn correctly', () => {
+    // Everything in the library has a render except `trap_bar_deadlift`, where
+    // the generator kept producing a straight barbell instead of a hexagonal
+    // frame. A picture showing the wrong equipment teaches the wrong thing
+    // more effectively than no picture, so that one keeps the diagram.
+    const keys = new Set(artKeys());
+    const missing = EXERCISES.map((exercise) => exercise.id).filter((id) => !keys.has(id));
 
-    for (const id of [
-      'hanging_leg_raise',
-      'seated_leg_curl',
-      'dip',
-      'standing_calf_raise',
-      'seated_calf_raise',
-      'cable_crunch',
-      'back_extension',
-      'stationary_bike',
-      'incline_walk',
-      'mobility_flow',
-    ]) {
-      expect(keys, id).toContain(id);
-    }
+    expect(missing).toEqual(['trap_bar_deadlift']);
   });
 
-  it('leaves the rest on the diagram rather than breaking', () => {
-    // The map is deliberately partial. A visual system that only works once
-    // all fifty-one renders exist is broken for as long as they take to draw.
-    const keys = artKeys();
-
-    expect(keys.length).toBeLessThan(EXERCISES.length);
-    expect(keys).not.toContain('barbell_bench_press');
+  it('keeps the diagram fallback working for anything unrendered', () => {
+    // The fallback is not vestigial while a real exercise still relies on it.
+    expect(artKeys()).not.toContain('trap_bar_deadlift');
   });
 });

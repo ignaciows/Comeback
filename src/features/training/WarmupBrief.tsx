@@ -1,4 +1,4 @@
-import { StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton, TextButton } from '@/components/Button';
 import { Label, Text } from '@/design-system/Text';
@@ -6,6 +6,7 @@ import { Icon } from '@/design-system/Icon';
 import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
 import { exerciseName } from '@/data/exercises';
 import { warmupForExercise } from '@/domain/training/warmup';
+import { WARMUP_ART } from '@/features/training/warmupArt';
 
 /**
  * The two minutes before the first set of a lift.
@@ -43,6 +44,17 @@ export function WarmupBrief({
       <View style={styles.list}>
         {drills.map((drill) => (
           <View key={drill.id} style={styles.drill}>
+            {/* The picture matters more here than on the lifts: nobody arrives
+                already knowing what a 90/90 is, and a name plus one line is not
+                enough to attempt a movement you have never seen. */}
+            {WARMUP_ART[drill.id] ? (
+              <Image
+                source={WARMUP_ART[drill.id]}
+                style={styles.art}
+                resizeMode="contain"
+                accessibilityLabel={`${drill.name}, wireframe illustration`}
+              />
+            ) : null}
             <View style={styles.drillHead}>
               <Text variant="heading">{drill.name}</Text>
               <Text variant="caption" mono tone="tertiary">
@@ -91,6 +103,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
     gap: spacing.xs,
+  },
+  art: {
+    width: '100%',
+    height: 150,
+    marginBottom: spacing.sm,
   },
   drillHead: {
     flexDirection: 'row',

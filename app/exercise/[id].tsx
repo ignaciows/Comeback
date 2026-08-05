@@ -12,10 +12,9 @@ import { Text } from '@/design-system/Text';
 import { spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
-import { FormGuideContent } from '@/features/training/FormGuide';
+import { CoachCascade } from '@/features/training/CoachCascade';
 import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
 import { MovementArt } from '@/features/training/MovementArt';
-import { MuscleMap } from '@/features/training/MuscleMap';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
 
@@ -78,20 +77,22 @@ export default function ExerciseDetailScreen() {
       ) : null}
 
       {meta ? (
-        <Section title="What it works">
-          <MuscleMap primary={meta.primaryMuscle} secondary={meta.secondaryMuscles} height={200} />
-        </Section>
-      ) : null}
-
-      {meta ? (
         <Section title="Find it in the gym" footnote={equipmentHint(meta.equipment) ?? undefined}>
           <EquipmentIllustration equipment={meta.equipment} size={56} />
         </Section>
       ) : null}
 
-      <Section title="How to do it">
-        <FormGuideContent exerciseId={id} />
-      </Section>
+      {/*
+        Everything about doing it well, as one argument descending rather than
+        four unrelated boxes. The muscle map lives inside it, on the stage
+        about what you should feel — which is the only place it answers a
+        question someone is actually asking.
+      */}
+      {meta ? (
+        <Section title="Doing it well" footnote="Why each part matters, not just what to do">
+          <CoachCascade exerciseId={id} />
+        </Section>
+      ) : null}
 
       {entries.length === 0 ? (
         <EmptyState
