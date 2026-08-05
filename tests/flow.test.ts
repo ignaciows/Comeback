@@ -29,6 +29,8 @@ const { analyseComposition, frameSize } = await import('@/domain/body/compositio
 const { STORAGE_KEY } = await import('@/services/storage/adapter');
 const { today } = await import('@/utils/date');
 const { CEILING_ROUTE_ID } = await import('@/domain/plan/fatCeiling');
+const { CALIBRATION_ROUTE_ID } = await import('@/domain/plan/calibration');
+const { getRoute } = await import('@/domain/plan/routes');
 
 const onboarding = {
   name: 'Ignacio',
@@ -852,6 +854,33 @@ describe('main flow', () => {
     expect(state.goal?.speed).toBe('fast');
     expect(state.goal?.maxBodyFatPercent).toBe(20);
     expect(state.goal?.muscleFocus).toEqual(['back']);
+  });
+
+  it('starts the fortnight in front of the route, without replacing it', () => {
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().startCalibration('lean_bulk_then_short_cut');
+
+    const state = useAppStore.getState();
+    const chosen = getRoute('lean_bulk_then_short_cut')!;
+
+    expect(state.planRoute?.routeId).toBe(CALIBRATION_ROUTE_ID);
+    // What the user picked is still what they get, two weeks later.
+    expect(state.planRoute?.blocks?.slice(1)).toEqual(chosen.blocks);
+    expect(state.planRoute?.blocks?.[0].label).toBe('Calibration');
+
+    // Maintenance, so the scale is not moving while the baseline is read.
+    expect(state.goal?.strategy).toBe('maintain');
+    // Three full-body days of the basic patterns, whatever the plan asks for
+    // afterwards — data needs sessions that actually happen.
+    expect(state.training.preferredDaysPerWeek).toBe(3);
+
+    const routine = state.routines.find((entry) => entry.id === state.activeRoutineId);
+    expect(routine?.name).toBe('Calibration');
+    expect(routine?.days).toHaveLength(3);
+    const lifts = new Set(routine?.days.flatMap((day) => day.exercises.map((entry) => entry.exerciseId)));
+    expect(lifts.has('back_squat')).toBe(true);
+    expect(lifts.has('deadlift')).toBe(true);
+    expect(lifts.has('cable_curl')).toBe(false);
   });
 
   it('produces a usable state from the development seed', () => {

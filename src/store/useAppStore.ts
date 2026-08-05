@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { buildInitialRoutine, type PlanRequest } from '@/data/routineTemplates';
+import { buildCalibrationRoutine, buildInitialRoutine, type PlanRequest } from '@/data/routineTemplates';
 import { getExercise } from '@/data/exercises';
 import { trainingConfig } from '@/domain/config';
 import { runEngine } from '@/domain/engine';
@@ -11,6 +11,7 @@ import { asObjective, asSpeed, requiredSessionsPerWeek } from '@/domain/plan/com
 import type { CustomBlock } from '@/domain/plan/customPlan';
 import type { VerdictAction } from '@/domain/plan/verdict';
 import { getRoute, type FollowedRoute, type PlanRoute } from '@/domain/plan/routes';
+import { CALIBRATION_DAYS_PER_WEEK, withCalibration } from '@/domain/plan/calibration';
 import { observedWeeklyRate } from '@/domain/plan/observedRate';
 import type { Proposal } from '@/domain/inference/proposals';
 import type { LessonRecord } from '@/domain/learning';
@@ -300,6 +301,11 @@ type Actions = {
     identity?: { routeId: string; name: string; reason: string },
   ) => void;
   advanceRouteBlock: (strategy: NutritionStrategy) => void;
+  /**
+   * Puts two weeks of calibration in front of the route the user is heading
+   * for, and switches the routine to the basic patterns while it runs.
+   */
+  startCalibration: (targetRouteId: string) => void;
   /**
    * The single door every plan lever goes through.
    *
@@ -1459,6 +1465,53 @@ export const useAppStore = create<Store>()(
             WEEKDAYS_FOR[DAYS_FOR_STRATEGY[first.strategy]] ?? state.training.preferredWeekdays,
         });
         track({ name: 'plan_reconfigured', reason: identity?.routeId ?? 'custom' });
+      },
+
+      /**
+       * Starts the fortnight of calibration.
+       *
+       * The chosen route travels behind it untouched, so what the user picked
+       * is still what they get — two weeks later and built on numbers somebody
+       * measured rather than a questionnaire. Training drops to three
+       * full-body days of the basic patterns for the duration.
+       */
+      startCalibration: (targetRouteId) => {
+        const state = get();
+        const target = getRoute(targetRouteId);
+        if (!target || !state.goal) return;
+
+        const route = withCalibration(target);
+        const date = todayOf();
+
+        set({
+          planRoute: {
+            routeId: route.id,
+            startedAt: date,
+            name: route.name,
+            blocks: route.blocks,
+          },
+        });
+
+        // Maintenance while the baseline is taken: a surplus or a deficit
+        // during the fortnight would move the scale and contaminate it.
+        get().changeStrategy('maintain', { note: 'Calibration' });
+
+        const routine = buildCalibrationRoutine(state.training.location);
+        set((current) => ({
+          routines: [...current.routines, routine],
+          activeRoutineId: routine.id,
+          plannedSessions: keepPastAndResolved(current.plannedSessions, date),
+          training: {
+            ...current.training,
+            preferredDaysPerWeek: CALIBRATION_DAYS_PER_WEEK,
+            minDaysPerWeek: CALIBRATION_DAYS_PER_WEEK,
+            preferredWeekdays:
+              WEEKDAYS_FOR[CALIBRATION_DAYS_PER_WEEK] ?? current.training.preferredWeekdays,
+          },
+        }));
+
+        get().ensurePlan();
+        track({ name: 'plan_reconfigured', reason: 'calibration' });
       },
 
       /** Moves to the next block of the running route, once its time is up. */

@@ -337,6 +337,60 @@ export function buildInitialRoutine(request: PlanRequest): Routine {
   };
 }
 
+/**
+ * The routine for the two calibration weeks.
+ *
+ * Three full-body days built from the five basic patterns, and nothing else.
+ * Everything the plan later derives — starting loads, how long a session takes
+ * you, whether you hit the days you said you would — comes out of these lifts,
+ * and an accessory nobody has a baseline for teaches the app nothing it can
+ * use. Sets are deliberately low: this fortnight is a measurement, and a
+ * measurement taken while exhausted measures fatigue.
+ *
+ * Each pattern lands twice a week across the three days, so by the end there
+ * are two data points per lift rather than one to build a two-year plan on.
+ */
+export function buildCalibrationRoutine(location: TrainingLocation): Routine {
+  const timestamp = nowISO();
+
+  const plan: { name: string; focus: MuscleGroup[]; lifts: string[] }[] = [
+    { name: 'Calibration A', focus: ['quads', 'chest', 'back'], lifts: ['back_squat', 'barbell_bench_press', 'barbell_row'] },
+    { name: 'Calibration B', focus: ['hamstrings', 'shoulders', 'back'], lifts: ['deadlift', 'overhead_press', 'barbell_row'] },
+    { name: 'Calibration C', focus: ['quads', 'chest', 'shoulders'], lifts: ['back_squat', 'barbell_bench_press', 'overhead_press'] },
+  ];
+
+  const days: RoutineDay[] = plan.map((day, dayIndex) => ({
+    id: createId(),
+    order: dayIndex,
+    name: day.name,
+    focus: day.focus,
+    exercises: day.lifts
+      .map((exerciseId) => adaptToLocation(exerciseId, location))
+      .filter((exerciseId): exerciseId is string => exerciseId !== null)
+      .map((exerciseId, index): RoutineExercise => ({
+        id: createId(),
+        exerciseId,
+        order: index,
+        // Three sets is enough to find a working load and not enough to bury
+        // anyone in week one.
+        sets: 3,
+        repMin: 5,
+        repMax: 8,
+        restSeconds: trainingConfig.defaultRestSeconds,
+      })),
+  }));
+
+  return {
+    id: createId(),
+    name: 'Calibration',
+    daysPerWeek: 3,
+    days,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
+  };
+}
+
 /** A short, honest description of what the first two weeks should achieve. */
 export function firstBlockObjective(request: PlanRequest): string {
   if (request.layoffWeeks >= 8) {

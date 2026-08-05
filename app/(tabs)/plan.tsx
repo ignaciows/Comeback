@@ -15,6 +15,12 @@ import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
+import {
+  CALIBRATION_DAYS,
+  calibrationReadout,
+  calibrationWindow,
+  isCalibrationRoute,
+} from '@/domain/plan/calibration';
 import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
 import { DayGrid } from '@/features/plan/DayGrid';
@@ -77,6 +83,16 @@ export default function PlanTab() {
   const journal = useMemo(() => summariseJournal(grid), [grid]);
 
   const hasRoute = useAppStore((state) => state.planRoute !== null);
+  const planRoute = useAppStore((state) => state.planRoute);
+
+  /** Null unless the two-week measuring phase is actually running. */
+  const calibration = useMemo(() => {
+    if (!planRoute || !isCalibrationRoute(planRoute.routeId)) return null;
+    const window = calibrationWindow(planRoute.startedAt, todayOf());
+    if (window.complete) return null;
+    return { window, readout: calibrationReadout(allSessions, window) };
+  }, [planRoute, allSessions]);
+
   const planHistory = useAppStore((state) => state.planHistory);
   const notSticking = revertSuggestion(planHistory, allSessions, todayOf());
   const actionLabel = verdictActionLabel(verdict);
@@ -170,6 +186,34 @@ export default function PlanTab() {
           </Text>
         </View>
       </Reveal>
+
+      {/*
+        While the fortnight runs, say so. Someone who chose an ambitious plan
+        and is looking at three full-body days needs to see that this is the
+        measuring phase they agreed to, not the plan quietly shrinking.
+      */}
+      {calibration ? (
+        <Reveal index={1}>
+          <View style={styles.calibration}>
+            <View style={styles.calibrationHead}>
+              <Label>Calibration</Label>
+              <Text variant="caption" tone="tertiary" mono>
+                {`day ${calibration.window.dayNumber} of ${CALIBRATION_DAYS}`}
+              </Text>
+            </View>
+            <Text variant="body" tone="secondary" style={styles.calibrationText}>
+              {calibration.readout.liftsRemaining.length === 0
+                ? `All five basic lifts measured. Your plan rebuilds from these numbers on ${formatLongDate(calibration.window.endsOn)}.`
+                : `${calibration.readout.sessionsDone} of ${calibration.readout.sessionsExpected} sessions done, ${calibration.readout.liftsMeasured.length} of 5 lifts measured. Your plan is built from these on ${formatLongDate(calibration.window.endsOn)}.`}
+            </Text>
+            <View style={styles.calibrationTrack}>
+              <View
+                style={[styles.calibrationFill, { width: `${Math.round(calibration.window.progress * 100)}%` }]}
+              />
+            </View>
+          </View>
+        </Reveal>
+      ) : null}
 
       {/* Anything just changed lands here, counting to its new value. */}
       <Reveal index={1}>
@@ -460,5 +504,33 @@ const styles = StyleSheet.create({
   },
   group: {
     marginTop: spacing.xl,
+  },
+  calibration: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.accentMuted,
+    backgroundColor: colors.accentSurface,
+  },
+  calibrationHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calibrationText: {
+    marginTop: spacing.sm,
+  },
+  calibrationTrack: {
+    height: 4,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceRaised,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  calibrationFill: {
+    height: '100%',
+    borderRadius: radius.pill,
+    backgroundColor: colors.accent,
   },
 });

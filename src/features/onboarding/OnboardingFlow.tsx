@@ -21,6 +21,7 @@ import {
   suggestTargetWeight,
   type SimulationInput,
 } from '@/domain/plan/simulate';
+import { CALIBRATION_DAYS_PER_WEEK } from '@/domain/plan/calibration';
 import type { FatTolerance, GoalType, PlanObjective, PlanSpeed } from '@/domain/types';
 import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
 import { useAppStore, WEEKDAYS_FOR, type OnboardingPayload } from '@/store/useAppStore';
@@ -56,11 +57,26 @@ const DEFAULTS = {
   fatTolerance: 'some' as FatTolerance,
 };
 
-type Step = 0 | 1 | 2 | 3;
+type Step = 0 | 1 | 2 | 3 | 4;
+
+/**
+ * The route the fortnight hands over to, from what they said they want.
+ *
+ * Picking it here rather than asking is the same principle as everywhere else
+ * in this flow: the objective already answers it, and the plan screen can
+ * change it afterwards. What matters is that a route exists to transition
+ * *into*, so calibration is a first block rather than a detour.
+ */
+const ROUTE_FOR_OBJECTIVE: Record<PlanObjective, string> = {
+  build: 'lean_bulk_then_short_cut',
+  lean: 'cut_then_build',
+  recomp: 'recomp',
+};
 
 export function OnboardingFlow() {
   const router = useRouter();
   const completeOnboarding = useAppStore((state) => state.completeOnboarding);
+  const startCalibration = useAppStore((state) => state.startCalibration);
 
   const [step, setStep] = useState<Step>(0);
   const [objective, setObjective] = useState<PlanObjective | null>(null);
@@ -154,13 +170,16 @@ export function OnboardingFlow() {
     };
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     completeOnboarding(payload);
+    // The plan they chose is what they get — two weeks later, and built on
+    // measurements rather than on the answers to three questions.
+    startCalibration(ROUTE_FOR_OBJECTIVE[objective]);
     router.replace('/(tabs)/today');
   };
 
   return (
     <Screen ambient>
       <View style={styles.progress}>
-        {[0, 1, 2, 3].map((index) => (
+        {[0, 1, 2, 3, 4].map((index) => (
           <View key={index} style={[styles.progressStep, index <= step && styles.progressStepDone]} />
         ))}
       </View>
@@ -379,8 +398,63 @@ export function OnboardingFlow() {
           <Note>Everything adjusts later, and the plan recalculates from what you actually do.</Note>
 
           <ActionBar>
-            <PrimaryButton label="Start" onPress={finish} />
+            <PrimaryButton label="Continue" onPress={() => advance(4)} />
             <TextButton label="Back" onPress={() => advance(2)} style={styles.back} />
+          </ActionBar>
+        </>
+      )}
+
+      {/*
+        The fortnight, explained before it starts rather than discovered.
+
+        Someone who asked for an ambitious plan and silently receives an easy
+        first two weeks concludes the app ignored them. The same fortnight,
+        announced, reads as the app taking them seriously enough to measure
+        first — which is what it is doing.
+      */}
+      {step === 4 && chosen && (
+        <>
+          <Reveal index={0}>
+            <Label style={styles.kicker}>Before your plan</Label>
+            <Text variant="title" style={styles.question}>
+              Two weeks of calibration
+            </Text>
+            <Text variant="bodySmall" tone="secondary" style={styles.subtitle}>
+              {`Before your ${Math.round(DEFAULTS.horizonWeeks / 4)}-month plan, two weeks of calibration. Fewer exercises, more attention on form — so we measure what you are actually capable of and build the plan around that instead of around a guess.`}
+            </Text>
+          </Reveal>
+
+          <Reveal index={1}>
+            <Section title="What these two weeks look like">
+              {[
+                `${CALIBRATION_DAYS_PER_WEEK} days a week, full body — a frequency you will actually hit.`,
+                'Five movements only: squat, bench, row, overhead press, deadlift.',
+                'Three sets each, stopping well short of failure. This is a measurement, not a test.',
+                'Eating at maintenance, so the scale is not moving while we read it.',
+              ].map((line) => (
+                <View key={line} style={styles.bullet}>
+                  <View style={styles.dot} />
+                  <Text variant="bodySmall" style={styles.bulletText}>
+                    {line}
+                  </Text>
+                </View>
+              ))}
+            </Section>
+          </Reveal>
+
+          <Reveal index={2}>
+            <Section title="Then what">
+              <Text variant="bodySmall" tone="secondary">
+                {`At the end of week two the app knows your starting loads, how long a session really takes you and how many days you actually train. Your plan — ${chosen.result.strategyLabel.toLowerCase()} — is rebuilt from those numbers and starts on its own.`}
+              </Text>
+            </Section>
+          </Reveal>
+
+          <Note>You can skip straight to the plan later if you would rather. Nothing is locked.</Note>
+
+          <ActionBar>
+            <PrimaryButton label="Start the two weeks" onPress={finish} />
+            <TextButton label="Back" onPress={() => advance(3)} style={styles.back} />
           </ActionBar>
         </>
       )}
