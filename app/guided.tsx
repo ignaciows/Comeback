@@ -3,7 +3,15 @@ import * as Haptics from 'expo-haptics';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeOut, useAnimatedStyle } from 'react-native-reanimated';
+import Animated, {
+  FadeIn,
+  FadeOut,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { PrimaryButton, SecondaryButton, TextButton } from '@/components/Button';
 import { StatusPill } from '@/components/Feedback';
@@ -17,11 +25,13 @@ import { cuesFor } from '@/data/coachingCues';
 import { exerciseName, findSubstitutions, getExercise } from '@/data/exercises';
 import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { startingLoad } from '@/domain/training/assessment';
+import { sessionLevels } from '@/domain/training/sessionLevels';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
-import type { WorkoutExercise, WorkoutSet } from '@/domain/types';
 import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
+import { LevelTrack } from '@/features/training/LevelTrack';
 import { Stepper } from '@/features/training/Stepper';
+import { WorkoutFooter } from '@/features/training/WorkoutFooter';
 import { BottomSheet } from '@/components/BottomSheet';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -38,6 +48,13 @@ import { useAppStore } from '@/store/useAppStore';
  * logged here is a set logged, and you can leave at any point and carry on in
  * the other mode. Nothing is a separate "guided workout" with its own record.
  */
+/**
+ * Long enough to register as deliberate, short enough that it is finished
+ * before you have racked the weight. Anything longer starts to feel like
+ * something you are waiting out.
+ */
+const LEVEL_PULSE_MS = 400;
+
 export default function GuidedScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
@@ -70,6 +87,45 @@ export default function GuidedScreen() {
   const [chosenSwap, setChosenSwap] = useState<string | null>(null);
   const [weight, setWeight] = useState<number | null>(null);
   const [reps, setReps] = useState<number | null>(null);
+
+  /**
+   * Clearing a level is worth marking, and worth marking *briefly*.
+   *
+   * A modal or an achievement card would cut the rhythm between exercises
+   * dead — you would have to dismiss a congratulation before you could go and
+   * do the next thing, which turns a good moment into an interruption. So:
+   * haptics, and the movement wireframe glows in the accent colour for 400 ms.
+   * It is over before you have finished putting the dumbbells down.
+   */
+  /**
+   * The exercise being celebrated, held on screen for the length of the pulse.
+   *
+   * Without this the write lands first, `current` has already advanced, and
+   * the glow appears on the wireframe of the exercise you have not started —
+   * which reads as the app congratulating you for the wrong thing.
+   */
+  const [cleared, setCleared] = useState<{ exerciseId: string; caption: string } | null>(null);
+
+  const clear = useSharedValue(0);
+  const clearStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(clear.value, [0, 1], ['rgba(91, 228, 155, 0)', colors.accent]),
+    backgroundColor: interpolateColor(clear.value, [0, 1], ['rgba(91, 228, 155, 0)', colors.accentSurface]),
+  }));
+
+  const celebrateLevel = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    clear.value = withSequence(
+      withTiming(1, { duration: motion.duration.instant }),
+      withTiming(0, { duration: LEVEL_PULSE_MS - motion.duration.instant }),
+    );
+  };
+
+  // The hold releases itself; nothing to dismiss, which is the whole point.
+  useEffect(() => {
+    if (!cleared) return;
+    const timer = setTimeout(() => setCleared(null), LEVEL_PULSE_MS);
+    return () => clearTimeout(timer);
+  }, [cleared]);
 
   // One ticking clock drives the rest countdown and the session timer.
   useEffect(() => {
@@ -175,6 +231,7 @@ export default function GuidedScreen() {
   const equipment = gyms.find((entry) => entry.id === gymId)?.equipment ?? gyms[0]?.equipment ?? {};
 
   const progress = session ? sessionProgress(session, new Date(now)) : null;
+  const levels = useMemo(() => (session ? sessionLevels(session) : null), [session]);
   const meta = current ? getExercise(current.exercise.exerciseId) : null;
   const cue = current && meta ? cueForSet(current.exercise.exerciseId, current.index, cuesFor(current.exercise.exerciseId, meta.pattern)) : null;
 
@@ -258,7 +315,18 @@ export default function GuidedScreen() {
   }
 
   const logSet = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // A set that clears the level gets the level's celebration instead of the
+    // ordinary one, rather than both firing on the same tap.
+    if (levels?.lastOfLevel) {
+      celebrateLevel();
+      setCleared({
+        exerciseId: current.exercise.exerciseId,
+        caption: `Level ${levels.level} of ${levels.levelCount} cleared`,
+      });
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
     updateSet(session.id, current.exercise.id, current.set.id, {
       weightKg: weight,
       reps,
@@ -285,6 +353,34 @@ export default function GuidedScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     addSet(session.id, current.exercise.id, { duplicateLast: true });
   };
+
+  // ---- Level cleared -------------------------------------------------------
+  // Four hundred milliseconds, then it moves on by itself. Deliberately not a
+  // modal: an achievement card you have to dismiss turns the best moment of
+  // the session into one more thing standing between you and the next lift.
+  if (cleared) {
+    const clearedMeta = getExercise(cleared.exerciseId);
+    return (
+      <Screen scroll={false}>
+        <SessionBarTop session={session} progress={progress} onClose={() => router.back()} />
+
+        <View style={styles.centre}>
+          <Animated.View style={[styles.clearPulse, clearStyle]}>
+            <ExerciseStages
+              pattern={clearedMeta?.pattern ?? 'isolation'}
+              equipment={clearedMeta?.equipment ?? []}
+            />
+          </Animated.View>
+
+          <Text variant="heading" style={styles.clearText}>
+            {cleared.caption}
+          </Text>
+        </View>
+
+        {levels ? <WorkoutFooter levels={levels} /> : null}
+      </Screen>
+    );
+  }
 
   // ---- Resting -------------------------------------------------------------
   if (restLeft !== null) {
@@ -359,9 +455,10 @@ export default function GuidedScreen() {
         <Text variant="title" style={styles.name}>
           {exerciseName(current.exercise.exerciseId)}
         </Text>
-        <Label style={styles.setLabel}>
-          {`Exercise ${current.position + 1} of ${current.total} · set ${current.index + 1} of ${totalSets}`}
-        </Label>
+
+        {/* The level you are on, and only its sublevels. How far through the
+            whole workout you are lives at the foot of the screen. */}
+        {levels ? <LevelTrack levels={levels} /> : null}
 
         {/* What the plan asks for, stated before you are asked to decide
             anything. The steppers below are there to disagree with it, not to
@@ -426,6 +523,8 @@ export default function GuidedScreen() {
             onPress={() => (progress.isPaused ? resumeSession(session.id) : pauseSession(session.id))}
           />
         </View>
+
+        {levels ? <WorkoutFooter levels={levels} /> : null}
       </Animated.View>
 
       <ExercisePicker
@@ -526,13 +625,21 @@ export default function GuidedScreen() {
   );
 }
 
-/** How far through the whole session, plus the clock and a way out. */
+/**
+ * The clock, whether the session is running, and a way out.
+ *
+ * It used to also draw one segment per working set of the entire session —
+ * twenty-four slivers on a six-exercise day, nearly all of them about work
+ * forty minutes away. That is now two separate things in the places they
+ * belong: the sets of the current exercise sit under its name, and the whole
+ * workout gets a single bar at the foot of the screen.
+ */
 function SessionBarTop({
   session,
   progress,
   onClose,
 }: {
-  session: { exercises: WorkoutExercise[] };
+  session: { exercises: unknown[] };
   progress: ReturnType<typeof sessionProgress>;
   onClose: () => void;
 }) {
@@ -540,11 +647,6 @@ function SessionBarTop({
   const live = useAnimatedStyle(() => ({
     opacity: progress.isPaused ? 0.4 : 0.5 + Math.sin(beat.value * Math.PI) * 0.5,
   }));
-
-  // One segment per working set of the session, filled as they are done.
-  const segments = session.exercises
-    .filter((exercise) => !exercise.skipped)
-    .flatMap((exercise) => exercise.sets.filter((entry) => !entry.warmup));
 
   return (
     <View style={styles.top}>
@@ -561,16 +663,6 @@ function SessionBarTop({
         </View>
 
         {progress.isPaused ? <StatusPill label="Paused" tone="warning" /> : null}
-      </View>
-
-      <View style={styles.segments}>
-        {segments.map((entry: WorkoutSet, index: number) => (
-          <View
-            key={entry.id}
-            style={[styles.segment, entry.completed ? styles.segmentDone : null]}
-            accessibilityLabel={`Set ${index + 1}`}
-          />
-        ))}
       </View>
     </View>
   );
@@ -607,18 +699,13 @@ const styles = StyleSheet.create({
   dotPaused: {
     backgroundColor: colors.warning,
   },
-  segments: {
-    flexDirection: 'row',
-    gap: 3,
+  clearPulse: {
+    borderRadius: radius.xl,
+    borderWidth: borderWidth.hairline,
+    padding: spacing.lg,
   },
-  segment: {
-    flex: 1,
-    height: 4,
-    borderRadius: radius.pill,
-    backgroundColor: colors.surfaceRaised,
-  },
-  segmentDone: {
-    backgroundColor: colors.accent,
+  clearText: {
+    marginTop: spacing.lg,
   },
   animation: {
     alignSelf: 'center',
@@ -626,10 +713,6 @@ const styles = StyleSheet.create({
   name: {
     textAlign: 'center',
     marginTop: spacing.xl,
-  },
-  setLabel: {
-    textAlign: 'center',
-    marginTop: spacing.sm,
   },
   swap: {
     flexDirection: 'row',
