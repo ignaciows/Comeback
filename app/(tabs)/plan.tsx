@@ -14,6 +14,7 @@ import { Icon, type IconName } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS } from '@/data/exercises';
+import { bodyMilestones } from '@/domain/body/wireframe';
 import { buildJournal, futureDays, summariseJournal } from '@/domain/journal';
 import {
   CALIBRATION_DAYS,
@@ -23,6 +24,7 @@ import {
 } from '@/domain/plan/calibration';
 import { revertSuggestion } from '@/domain/plan/history';
 import { strategyProfile } from '@/domain/plan/strategies';
+import { BodyMilestones } from '@/features/body/BodyMilestones';
 import { DayGrid } from '@/features/plan/DayGrid';
 import { PathTrack, pathWeeksFrom } from '@/features/plan/PathTrack';
 import { PhaseGrid } from '@/features/plan/PhaseGrid';
@@ -92,6 +94,23 @@ export default function PlanTab() {
     if (window.complete) return null;
     return { window, readout: calibrationReadout(allSessions, window) };
   }, [planRoute, allSessions]);
+
+  const profile = useAppStore((state) => state.profile);
+
+  /**
+   * Needs a real body-fat reading, not an assumed one: the whole point is that
+   * the picture matches the number beside it, and both would be a guess.
+   */
+  const milestones = useMemo(() => {
+    const latest = [...measurements].sort((a, b) => (a.date < b.date ? -1 : 1)).at(-1) ?? null;
+    if (!profile || !latest || latest.bodyFatPercent === null || phases.length === 0) return [];
+    return bodyMilestones({
+      phases,
+      weightKg: latest.weightKg,
+      bodyFatPercent: latest.bodyFatPercent,
+      heightCm: profile.heightCm,
+    });
+  }, [profile, measurements, phases]);
 
   const planHistory = useAppStore((state) => state.planHistory);
   const notSticking = revertSuggestion(planHistory, allSessions, todayOf());
@@ -239,6 +258,21 @@ export default function PlanTab() {
             footnote={`${phases.length} phases · what to eat and how to train in each`}
           >
             <PhaseGrid phases={phases} onPressPhase={() => router.push('/roadmap')} />
+          </Section>
+        </Reveal>
+      ) : null}
+
+      {/*
+        The same phases as a body rather than as numbers. "82 kg at 14 %" is a
+        fact almost nobody can picture, and a plan you cannot picture is one
+        you drop in week six. Three milestones rather than one per phase: eight
+        silhouettes across a two-year plan mostly look identical, and only
+        points far enough apart actually show the change.
+      */}
+      {milestones.length >= 2 ? (
+        <Reveal index={3}>
+          <Section title="What that turns you into" footnote="Today, halfway, and the end of the plan">
+            <BodyMilestones bodies={milestones} labels={['Now', 'Halfway', 'End']} />
           </Section>
         </Reveal>
       ) : null}
