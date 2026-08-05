@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton, TextButton } from '@/components/Button';
@@ -13,28 +13,38 @@ import { Section } from '@/components/Section';
 import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
-import { planToCeiling, weeksOfHeadroom } from '@/domain/plan/fatCeiling';
 import { analyseComposition } from '@/domain/body/composition';
+import { compareAgainstCeiling } from '@/domain/plan/ceilingComparison';
+import { CEILING_ROUTE_ID, planToCeiling, weeksOfHeadroom } from '@/domain/plan/fatCeiling';
+import type { RouteInput } from '@/domain/plan/routes';
+import { RouteChart } from '@/features/plan/RouteChart';
 import { useAppStore } from '@/store/useAppStore';
+import { today as todayOf } from '@/utils/date';
 
 /**
- * The limit the plan is not allowed to cross.
+ * "How far up are you willing to go?" — the first question, not a setting.
  *
- * "Build as fast as possible, but never past seventeen percent" is the shape
- * of what people actually want, and no plan picker asks for it. Without the
- * limit the plan runs until the horizon and someone quietly stops using it
- * when they do not like the mirror — which is not a motivation problem, it is
- * a plan that was never told about the one thing that mattered.
+ * The plan pickers all ask some version of "build or cut", which is the wrong
+ * question because it is downstream of this one. Someone at 18.7 % who will
+ * not pass 17 % has already answered "build or cut" without knowing it: there
+ * is no room to build, so the plan cuts, and the module can work that out
+ * without making them guess. Asking for the ceiling first means the app
+ * derives the direction instead of asking the user to.
  *
- * Setting it changes where phases end, so the screen shows that consequence
- * live: how many weeks of building this buys, and where the cut lands.
+ * The screen shows three things in the order they earn attention: what the
+ * limit implies, why it implies that, and what it costs against the plans that
+ * ignore it. The last one exists because a promise with nothing to weigh it
+ * against gets accepted blindly or not at all.
  */
 export default function FatCeilingScreen() {
   const router = useRouter();
   const goal = useAppStore((state) => state.goal);
   const profile = useAppStore((state) => state.profile);
   const measurements = useAppStore((state) => state.bodyMeasurements);
+  const training = useAppStore((state) => state.training);
+  const planRoute = useAppStore((state) => state.planRoute);
   const updateGoal = useAppStore((state) => state.updateGoal);
+  const applyCustomPlan = useAppStore((state) => state.applyCustomPlan);
 
   const latest = [...measurements].sort((a, b) => (a.date < b.date ? -1 : 1)).at(-1) ?? null;
   const weightKg = latest?.weightKg ?? 80;
@@ -52,33 +62,75 @@ export default function FatCeilingScreen() {
       : null;
 
   const currentFat = composition?.bodyFatPercent ?? 18;
+  const experience = profile?.experience ?? 'intermediate';
+  const horizonWeeks = goal?.horizonWeeks ?? 32;
   const [ceiling, setCeiling] = useState<number | null>(goal?.maxBodyFatPercent ?? null);
 
-  const preview =
-    ceiling === null
-      ? null
-      : planToCeiling({
-          weightKg,
-          bodyFatPercent: currentFat,
-          ceilingPercent: ceiling,
-          buildStrategy: 'lean_bulk',
-          cutStrategy: 'cut',
-          horizonWeeks: goal?.horizonWeeks ?? 24,
-        });
+  const ceilingArgs = useMemo(
+    () =>
+      ceiling === null
+        ? null
+        : {
+            weightKg,
+            bodyFatPercent: currentFat,
+            ceilingPercent: ceiling,
+            buildStrategy: 'lean_bulk' as const,
+            cutStrategy: 'cut' as const,
+            experience,
+            horizonWeeks,
+          },
+    [ceiling, weightKg, currentFat, experience, horizonWeeks],
+  );
 
-  const headroom =
-    ceiling === null
-      ? null
-      : weeksOfHeadroom({
-          weightKg,
-          bodyFatPercent: currentFat,
-          ceilingPercent: ceiling,
-          buildStrategy: 'lean_bulk',
-          cutStrategy: 'cut',
-        });
+  const preview = useMemo(() => (ceilingArgs ? planToCeiling(ceilingArgs) : null), [ceilingArgs]);
+  const headroom = useMemo(
+    () => (ceilingArgs ? weeksOfHeadroom(ceilingArgs) : null),
+    [ceilingArgs],
+  );
 
-  const save = () => {
+  /**
+   * The comparison needs a real body-fat reading, not the 18 % placeholder the
+   * preview falls back on — every number in it is a body-fat number, and one
+   * built on a guess would be confidently wrong.
+   */
+  const comparison = useMemo(() => {
+    if (ceiling === null || !profile || !latest || latest.bodyFatPercent === null) return null;
+    const input: RouteInput = {
+      today: todayOf(),
+      currentWeightKg: weightKg,
+      heightCm: profile.heightCm,
+      age: profile.age ?? 30,
+      sex: profile.sex,
+      experience: profile.experience,
+      bodyFatPercent: latest.bodyFatPercent,
+      sessionsPerWeek: training.preferredDaysPerWeek,
+    };
+    return compareAgainstCeiling(input, ceiling, { horizonWeeks });
+  }, [ceiling, profile, latest, weightKg, training.preferredDaysPerWeek, horizonWeeks]);
+
+  const already = planRoute?.routeId === CEILING_ROUTE_ID;
+
+  const usePlan = () => {
+    if (!preview || preview.blocks.length === 0 || ceiling === null) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    updateGoal({ maxBodyFatPercent: ceiling });
+    applyCustomPlan(
+      preview.blocks.map((block, index) => ({
+        id: `ceiling-${index}`,
+        strategy: block.strategy,
+        weeks: block.weeks,
+      })),
+      {
+        routeId: CEILING_ROUTE_ID,
+        name: `Never past ${ceiling} %`,
+        reason: `Switched to a plan capped at ${ceiling} % body fat`,
+      },
+    );
+    router.back();
+  };
+
+  const saveLimitOnly = () => {
+    Haptics.selectionAsync();
     updateGoal({ maxBodyFatPercent: ceiling });
     router.back();
   };
@@ -88,15 +140,15 @@ export default function FatCeilingScreen() {
   return (
     <Screen bottomInset={spacing.xxl}>
       <Header
-        title="Your fat limit"
-        subtitle={`You are around ${currentFat.toFixed(0)} % now`}
+        title="How high will you let it go?"
+        subtitle={`Around ${currentFat.toFixed(1)} % body fat now`}
         leading={{ icon: 'chevronLeft', onPress: () => router.back(), label: 'Back' }}
       />
 
       <Reveal index={0}>
         <Note>
-          A limit the plan may not cross. Building phases end when the projection would take you past
-          it, and a cut brings you back down before the next one starts.
+          Pick the number you will not pass and the plan works out the rest — whether it builds or
+          cuts first, and for how long. You do not have to decide that part.
         </Note>
       </Reveal>
 
@@ -139,15 +191,35 @@ export default function FatCeilingScreen() {
         </Section>
       </Reveal>
 
-      {/* The consequence, live. A limit with no visible effect is a setting. */}
-      {preview && ceiling !== null ? (
+      {/*
+        Why this plan, before what the plan is. Someone who came in wanting to
+        build and is being told to cut will not read past the first block
+        otherwise — and the reason is arithmetic they can check, not advice.
+      */}
+      {preview?.rationale ? (
         <Reveal index={2}>
+          <View style={styles.rationale}>
+            <View style={styles.rationaleHead}>
+              <Icon name="info" size={14} color={colors.accent} />
+              <Text variant="heading">{preview.rationale.headline}</Text>
+            </View>
+            <Text variant="body" tone="secondary" style={styles.rationaleText}>
+              {preview.rationale.detail}
+            </Text>
+          </View>
+        </Reveal>
+      ) : null}
+
+      {preview && ceiling !== null ? (
+        <Reveal index={3}>
           <Section title="What that gives you">
             {headroom !== null && headroom > 0 ? (
               <View style={styles.headroom}>
                 <AnimatedNumber value={headroom} variant="display" />
                 <Text variant="body" tone="secondary">
-                  {headroom === 1 ? 'week of building before you have to stop' : 'weeks of building before you have to stop'}
+                  {headroom === 1
+                    ? 'week of building before you have to stop'
+                    : 'weeks of building before you have to stop'}
                 </Text>
               </View>
             ) : null}
@@ -182,8 +254,86 @@ export default function FatCeilingScreen() {
         </Reveal>
       ) : null}
 
-      <Reveal index={3}>
-        <PrimaryButton label="Use this limit" onPress={save} style={styles.cta} />
+      {/*
+        The trade, against the plans that ignore the limit. Without this the
+        ceiling is a promise with nothing to weigh it against, and the honest
+        objection — "I would have gained more without it" — goes unanswered.
+      */}
+      {comparison ? (
+        <Reveal index={4}>
+          <Section
+            title="Against the other routes"
+            action={{ label: 'See them all', onPress: () => router.push('/routes') }}
+          >
+            <RouteChart
+              simulation={comparison.simulation}
+              height={100}
+              showBodyFat
+              style={styles.chart}
+            />
+
+            <View style={styles.compareRow}>
+              <View style={styles.compareName}>
+                <View style={[styles.dot, styles.dotBuild]} />
+                <Text variant="body">{comparison.ours.name}</Text>
+              </View>
+              <Text variant="bodySmall" mono style={styles.underLine}>
+                {`peaks ${comparison.ours.peakBodyFatPercent} %`}
+              </Text>
+            </View>
+
+            {comparison.others.map((other) => (
+              <View key={other.routeId} style={styles.compareRow}>
+                <View style={styles.compareName}>
+                  <View style={[styles.dot, other.crosses ? styles.dotOver : styles.dotCut]} />
+                  <Text variant="body" tone="secondary">
+                    {other.name}
+                  </Text>
+                </View>
+                <Text
+                  variant="bodySmall"
+                  mono
+                  style={other.crosses ? styles.overLine : undefined}
+                  tone={other.crosses ? 'primary' : 'tertiary'}
+                >
+                  {other.crosses
+                    ? `peaks ${other.peakBodyFatPercent} % · +${other.overshoot}`
+                    : `peaks ${other.peakBodyFatPercent} %`}
+                </Text>
+              </View>
+            ))}
+
+            {comparison.trade ? (
+              <Text variant="bodySmall" tone="secondary" style={styles.trade}>
+                {comparison.trade}
+              </Text>
+            ) : (
+              <Text variant="bodySmall" tone="tertiary" style={styles.trade}>
+                {`Nothing on the menu crosses ${comparison.ceiling} % from where you are, so the limit costs you nothing today.`}
+              </Text>
+            )}
+
+            <Label style={styles.muscle}>
+              {`This plan: +${comparison.ours.muscleGainKg} kg muscle over ${comparison.ours.weeks} weeks`}
+            </Label>
+          </Section>
+        </Reveal>
+      ) : null}
+
+      <Reveal index={5}>
+        <View style={styles.actions}>
+          {preview && preview.blocks.length > 0 ? (
+            <PrimaryButton
+              label={already ? 'Rebuild this plan' : 'Use this as my plan'}
+              onPress={usePlan}
+            />
+          ) : null}
+          <TextButton
+            label={ceiling === null ? 'Save with no limit' : 'Just save the limit'}
+            onPress={saveLimitOnly}
+            style={styles.secondary}
+          />
+        </View>
       </Reveal>
     </Screen>
   );
@@ -212,6 +362,20 @@ const styles = StyleSheet.create({
   none: {
     alignSelf: 'center',
     marginTop: spacing.lg,
+  },
+  rationale: {
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accentSurface,
+  },
+  rationaleHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  rationaleText: {
+    marginTop: spacing.sm,
   },
   headroom: {
     alignItems: 'center',
@@ -244,6 +408,9 @@ const styles = StyleSheet.create({
   dotCut: {
     backgroundColor: colors.textTertiary,
   },
+  dotOver: {
+    backgroundColor: colors.warning,
+  },
   blockText: {
     flex: 1,
     gap: spacing.xs,
@@ -251,7 +418,39 @@ const styles = StyleSheet.create({
   floor: {
     marginTop: spacing.md,
   },
-  cta: {
+  chart: {
+    marginBottom: spacing.lg,
+  },
+  compareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  compareName: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  underLine: {
+    color: colors.accent,
+  },
+  overLine: {
+    color: colors.warning,
+  },
+  trade: {
+    marginTop: spacing.lg,
+  },
+  muscle: {
+    marginTop: spacing.md,
+  },
+  actions: {
     marginTop: spacing.xl,
+    gap: spacing.md,
+  },
+  secondary: {
+    alignSelf: 'center',
   },
 });

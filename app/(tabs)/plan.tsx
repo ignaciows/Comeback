@@ -98,14 +98,28 @@ export default function PlanTab() {
           </Text>
         </Reveal>
 
+        {/*
+          The ceiling question comes first because the other two are downstream
+          of it. "Build or cut" is not something the user should have to answer
+          — at 18.7 % with a 17 % limit there is no room to build, and the plan
+          can work that out. Asking for the limit and deriving the direction is
+          one decision instead of two, and it is the decision people actually
+          hold.
+        */}
         <Reveal index={1}>
           <View style={styles.choices}>
             <PlanChoice
+              icon="body"
+              title="How high will you let your body fat go?"
+              detail="Give it a ceiling and it works out whether to build or cut, and for how long."
+              onPress={() => router.push('/fat-ceiling')}
+              primary
+            />
+            <PlanChoice
               icon="progress"
-              title="Choose one"
+              title="Choose a named plan"
               detail="Build then cut, lean build, cut first — with the curve drawn."
               onPress={() => router.push('/routes')}
-              primary
             />
             <PlanChoice
               icon="edit"
@@ -294,7 +308,7 @@ export default function PlanTab() {
               label="Fat limit"
               icon="body"
               value={goal?.maxBodyFatPercent ? `${goal.maxBodyFatPercent} %` : 'None'}
-              detail="Where building phases have to stop"
+              detail="Set a ceiling and rebuild the plan around it"
               onPress={() => router.push('/fat-ceiling')}
             />
             {routeProgress?.nextBlock ? null : (

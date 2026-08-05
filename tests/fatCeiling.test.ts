@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { CEILING_SWING, planToCeiling, weeksOfHeadroom, type CeilingInput } from '@/domain/plan/fatCeiling';
+import {
+  CEILING_ROUTE_ID,
+  CEILING_SWING,
+  ceilingRoute,
+  planToCeiling,
+  weeksOfHeadroom,
+  type CeilingInput,
+} from '@/domain/plan/fatCeiling';
 
 const input = (patch: Partial<CeilingInput> = {}): CeilingInput => ({
   weightKg: 80,
@@ -8,6 +15,7 @@ const input = (patch: Partial<CeilingInput> = {}): CeilingInput => ({
   ceilingPercent: 17,
   buildStrategy: 'lean_bulk',
   cutStrategy: 'cut',
+  experience: 'intermediate',
   horizonWeeks: 40,
   ...patch,
 });
@@ -114,6 +122,57 @@ describe('building up to a fat ceiling', () => {
     const fast = weeksOfHeadroom({ ...input(), buildStrategy: 'bulk' });
 
     expect(fast).toBeLessThan(slow);
+  });
+
+  it('explains a cut-first plan with the payoff, not just the refusal', () => {
+    // The user's actual question: 18.7 % now, unwilling to pass 17 %. "Cuts
+    // first" alone reads as the app disagreeing with them; the reason it is
+    // acceptable is the run of building it unlocks, so that has to be in the
+    // sentence and it has to be their own number.
+    const plan = planToCeiling(input({ bodyFatPercent: 18.7, ceilingPercent: 17 }));
+
+    expect(plan.rationale?.headline).toMatch(/starts with a cut/i);
+    expect(plan.rationale?.detail).toContain('18.7 %');
+    expect(plan.rationale?.detail).toContain('17 %');
+    expect(plan.rationale?.detail).toMatch(/opens up a \d+-week run of building/);
+  });
+
+  it('explains a build-first plan by how long the run lasts', () => {
+    const plan = planToCeiling(input({ bodyFatPercent: 12, buildStrategy: 'bulk', horizonWeeks: 60 }));
+
+    expect(plan.rationale?.headline).toMatch(/starts by building/i);
+    expect(plan.rationale?.detail).toMatch(/\d+ weeks of building/);
+  });
+
+  it('says the limit costs nothing when the horizon never reaches it', () => {
+    const plan = planToCeiling(input({ bodyFatPercent: 12, horizonWeeks: 24 }));
+
+    expect(plan.blocks).toHaveLength(1);
+    expect(plan.rationale?.detail).toMatch(/costs you nothing/i);
+  });
+
+  it('quotes only numbers the plan actually produced', () => {
+    // A sentence that drifts from the blocks under it is worse than no
+    // sentence, so every figure in it is read back off the plan.
+    const plan = planToCeiling(input({ bodyFatPercent: 22, ceilingPercent: 15 }));
+    const cut = plan.blocks[0];
+
+    expect(cut.kind).toBe('cut');
+    expect(plan.rationale?.detail).toContain(`${cut.weeks} weeks`);
+    expect(plan.rationale?.detail).toContain(`${plan.floorPercent} %`);
+  });
+
+  it('shapes the plan as a route the rest of the app can simulate', () => {
+    const route = ceilingRoute(input({ bodyFatPercent: 18.7, ceilingPercent: 17 }));
+    const plan = planToCeiling(input({ bodyFatPercent: 18.7, ceilingPercent: 17 }));
+
+    expect(route.id).toBe(CEILING_ROUTE_ID);
+    expect(route.name).toContain('17');
+    expect(route.blocks.map((block) => block.weeks)).toEqual(plan.blocks.map((block) => block.weeks));
+  });
+
+  it('has no rationale when there is no plan to explain', () => {
+    expect(planToCeiling(input({ horizonWeeks: 2 })).rationale).toBeNull();
   });
 
   it('terminates on a horizon it cannot fill', () => {

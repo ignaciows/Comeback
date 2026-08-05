@@ -9,6 +9,7 @@ import { Screen } from '@/components/Screen';
 import { Icon } from '@/design-system/Icon';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
+import { compareAgainstCeiling, type CeilingCheck } from '@/domain/plan/ceilingComparison';
 import { recommendRoute, simulateAllRoutes, type RouteInput } from '@/domain/plan/routes';
 import { RouteChart } from '@/features/plan/RouteChart';
 import { useBodyWeightSeries } from '@/store/hooks';
@@ -52,6 +53,22 @@ export default function RoutesScreen() {
     [input, goal],
   );
 
+  /**
+   * With a ceiling set, "which plan" stops being only about size and speed:
+   * some of these routes break a limit the user already committed to, and that
+   * is decisive information to leave off the card they are choosing from.
+   */
+  const ceiling = goal?.maxBodyFatPercent ?? null;
+  const comparison = useMemo(
+    () => (input && ceiling !== null ? compareAgainstCeiling(input, ceiling, { horizonWeeks: goal?.horizonWeeks ?? 32 }) : null),
+    [input, ceiling, goal?.horizonWeeks],
+  );
+  const checkFor = useMemo(() => {
+    const map = new Map<string, CeilingCheck>();
+    for (const other of comparison?.others ?? []) map.set(other.routeId, other);
+    return map;
+  }, [comparison]);
+
   if (!input || simulations.length === 0) {
     return (
       <Screen>
@@ -89,6 +106,35 @@ export default function RoutesScreen() {
               {recommendation.reason}
             </Text>
           </View>
+        </Reveal>
+      ) : null}
+
+      {/*
+        The ceiling plan sits above the menu rather than in it: it is not a
+        sixth template, it is the one route derived from a limit the user set,
+        and the routes below are being judged against it.
+      */}
+      {comparison ? (
+        <Reveal index={0}>
+          <Pressable
+            onPress={() => router.push('/fat-ceiling')}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.ceiling, pressed && { opacity: opacity.pressed }]}
+          >
+            <View style={styles.cardHead}>
+              <Text variant="heading">{comparison.ours.name}</Text>
+              <StatusPill label="Your limit" tone="accent" />
+            </View>
+            <Text variant="bodySmall" tone="secondary" style={styles.cardSummary}>
+              {comparison.trade ??
+                `Nothing below crosses ${comparison.ceiling} % from where you are, so the limit costs you nothing today.`}
+            </Text>
+            <View style={styles.stats}>
+              <Stat label="Takes" value={`${comparison.ours.weeks} weeks`} />
+              <Stat label="Muscle" value={`+${comparison.ours.muscleGainKg} kg`} accent />
+              <Stat label="Peaks at" value={`${comparison.ours.peakBodyFatPercent} %`} />
+            </View>
+          </Pressable>
         </Reveal>
       ) : null}
 
@@ -148,6 +194,17 @@ export default function RoutesScreen() {
                 <Text variant="caption" tone="tertiary" style={styles.cardFoot}>
                   {`Done around ${formatLongDate(simulation.endDate)}`}
                 </Text>
+
+                {/* Only when it breaks the limit. A route that respects it
+                    needs no badge saying so. */}
+                {checkFor.get(simulation.route.id)?.crosses ? (
+                  <View style={styles.breach}>
+                    <Icon name="info" size={13} color={colors.warning} />
+                    <Text variant="caption" style={styles.breachText}>
+                      {`Peaks at ${checkFor.get(simulation.route.id)!.peakBodyFatPercent} % — ${checkFor.get(simulation.route.id)!.overshoot} over your ${ceiling} % limit`}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             </Reveal>
           );
@@ -232,6 +289,24 @@ const styles = StyleSheet.create({
   },
   cardFoot: {
     marginTop: spacing.md,
+  },
+  ceiling: {
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.accentMuted,
+    backgroundColor: colors.accentSurface,
+    marginBottom: spacing.xl,
+  },
+  breach: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  breachText: {
+    color: colors.warning,
+    flex: 1,
   },
   build: {
     marginTop: spacing.xl,

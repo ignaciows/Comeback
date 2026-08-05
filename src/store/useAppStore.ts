@@ -289,7 +289,16 @@ type Actions = {
   /** Starts a multi-block route, or advances it to its next block. */
   applyRoute: (routeId: string) => void;
   /** Commits to a plan the user built themselves. */
-  applyCustomPlan: (blocks: CustomBlock[]) => void;
+  /**
+   * `identity` names a derived plan that is not one of the catalogue routes
+   * and not hand-dragged either — the fat-ceiling plan is computed from a
+   * limit, so it deserves its own name in the history rather than showing up
+   * as "Your plan" alongside things the user actually built.
+   */
+  applyCustomPlan: (
+    blocks: CustomBlock[],
+    identity?: { routeId: string; name: string; reason: string },
+  ) => void;
   advanceRouteBlock: (strategy: NutritionStrategy) => void;
   applyPlanIntent: (intent: {
     objective: PlanObjective;
@@ -1368,8 +1377,12 @@ export const useAppStore = create<Store>()(
        * plan instead of pointing at a catalogue entry — so editing the
        * built-in routes later cannot silently rewrite what someone built.
        */
-      applyCustomPlan: (blocks) => {
-        const priorPlan = snapshotOf(get(), 'Switched to a plan you built yourself');
+      applyCustomPlan: (blocks, identity) => {
+        const name = identity?.name ?? 'Your plan';
+        const priorPlan = snapshotOf(
+          get(),
+          identity?.reason ?? 'Switched to a plan you built yourself',
+        );
         const state = get();
         if (blocks.length === 0 || !state.goal) return;
 
@@ -1379,9 +1392,9 @@ export const useAppStore = create<Store>()(
         set((current) => ({
           planHistory: priorPlan ? pushSnapshot(current.planHistory, priorPlan) : current.planHistory,
           planRoute: {
-            routeId: 'custom',
+            routeId: identity?.routeId ?? 'custom',
             startedAt: date,
-            name: 'Your plan',
+            name,
             blocks: blocks.map((block) => ({
               strategy: block.strategy,
               weeks: block.weeks,
@@ -1390,13 +1403,13 @@ export const useAppStore = create<Store>()(
           },
         }));
 
-        get().changeStrategy(first.strategy, { note: 'Your plan' });
+        get().changeStrategy(first.strategy, { note: name });
         get().updateTraining({
           preferredDaysPerWeek: DAYS_FOR_STRATEGY[first.strategy],
           preferredWeekdays:
             WEEKDAYS_FOR[DAYS_FOR_STRATEGY[first.strategy]] ?? state.training.preferredWeekdays,
         });
-        track({ name: 'plan_reconfigured', reason: 'custom' });
+        track({ name: 'plan_reconfigured', reason: identity?.routeId ?? 'custom' });
       },
 
       /** Moves to the next block of the running route, once its time is up. */

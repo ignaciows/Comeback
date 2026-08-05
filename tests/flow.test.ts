@@ -28,6 +28,7 @@ const { sessionProgress } = await import('@/domain/training/sessionProgress');
 const { analyseComposition, frameSize } = await import('@/domain/body/composition');
 const { STORAGE_KEY } = await import('@/services/storage/adapter');
 const { today } = await import('@/utils/date');
+const { CEILING_ROUTE_ID } = await import('@/domain/plan/fatCeiling');
 
 const onboarding = {
   name: 'Ignacio',
@@ -765,6 +766,28 @@ describe('main flow', () => {
     const engine = selectEngine(state);
     expect(engine.routeProgress?.routeName).toBe('Your plan');
     expect(engine.routeProgress?.blockLabel).toBeTruthy();
+  });
+
+  it('adopts the fat-ceiling plan under its own name, not as a hand-built one', () => {
+    // The ceiling plan is derived from a limit rather than dragged into shape,
+    // so calling it "Your plan" in the history would make it indistinguishable
+    // from the ones the user actually built.
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().applyCustomPlan(
+      [
+        { id: 'ceiling-0', strategy: 'cut', weeks: 14 },
+        { id: 'ceiling-1', strategy: 'lean_bulk', weeks: 18 },
+      ],
+      { routeId: CEILING_ROUTE_ID, name: 'Never past 17 %', reason: 'Switched to a plan capped at 17 % body fat' },
+    );
+
+    const state = useAppStore.getState();
+    expect(state.planRoute?.routeId).toBe(CEILING_ROUTE_ID);
+    expect(state.planRoute?.name).toBe('Never past 17 %');
+    expect(state.goal?.strategy).toBe('cut');
+
+    const engine = selectEngine(state);
+    expect(engine.routeProgress?.routeName).toBe('Never past 17 %');
   });
 
   it('produces a usable state from the development seed', () => {
