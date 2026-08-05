@@ -27,7 +27,7 @@ import { cueForSet, restForSet, suggestLoad } from '@/domain/training/coaching';
 import { startingLoad } from '@/domain/training/assessment';
 import { sessionLevels } from '@/domain/training/sessionLevels';
 import { formatClock, sessionProgress, sessionStage } from '@/domain/training/sessionProgress';
-import { ExerciseStages } from '@/features/training/ExerciseStages';
+import { MovementArt } from '@/features/training/MovementArt';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { LevelTrack } from '@/features/training/LevelTrack';
 import { Stepper } from '@/features/training/Stepper';
@@ -376,7 +376,8 @@ export default function GuidedScreen() {
 
         <View style={styles.centre}>
           <Animated.View style={[styles.clearPulse, clearStyle]}>
-            <ExerciseStages
+            <MovementArt
+              exerciseId={cleared.exerciseId}
               pattern={clearedMeta?.pattern ?? 'isolation'}
               equipment={clearedMeta?.equipment ?? []}
             />
@@ -489,7 +490,8 @@ export default function GuidedScreen() {
           accessibilityLabel={`How to do ${exerciseName(current.exercise.exerciseId)}`}
           style={({ pressed }) => [styles.animation, pressed && { opacity: opacity.pressed }]}
         >
-          <ExerciseStages
+          <MovementArt
+            exerciseId={current.exercise.exerciseId}
             pattern={meta?.pattern ?? 'isolation'}
             equipment={meta?.equipment ?? []}
           />

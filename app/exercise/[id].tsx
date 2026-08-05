@@ -14,7 +14,7 @@ import { MUSCLE_GROUP_LABELS, PATTERN_LABELS, exerciseName, getExercise } from '
 import { estimateOneRepMax, setVolume } from '@/domain/training/metrics';
 import { FormGuideContent } from '@/features/training/FormGuide';
 import { EquipmentIllustration, equipmentHint } from '@/features/training/EquipmentIllustration';
-import { ExerciseStages } from '@/features/training/ExerciseStages';
+import { MovementArt } from '@/features/training/MovementArt';
 import { MuscleMap } from '@/features/training/MuscleMap';
 import { useCompletedSessions } from '@/store/hooks';
 import { formatShortDate } from '@/utils/date';
@@ -73,7 +73,7 @@ export default function ExerciseDetailScreen() {
 
       {meta ? (
         <Section title="The movement" footnote={PATTERN_LABELS[meta.pattern]}>
-          <ExerciseStages pattern={meta.pattern} equipment={meta.equipment} />
+          <MovementArt exerciseId={meta.id} pattern={meta.pattern} equipment={meta.equipment} />
         </Section>
       ) : null}
 

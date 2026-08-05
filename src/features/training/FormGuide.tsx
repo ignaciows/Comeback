@@ -7,7 +7,7 @@ import { colors, spacing } from '@/design-system/tokens';
 import { MUSCLE_GROUP_LABELS, exerciseName, getExercise } from '@/data/exercises';
 import { guidanceFor } from '@/data/exerciseGuidance';
 import { EquipmentIllustration, equipmentHint } from './EquipmentIllustration';
-import { ExerciseStages } from './ExerciseStages';
+import { MovementArt } from './MovementArt';
 import { MuscleMap } from './MuscleMap';
 
 /** Numbered or bulleted lines under a small heading. */
@@ -39,7 +39,8 @@ export function FormGuideContent({ exerciseId }: { exerciseId: string }) {
   return (
     <View>
       {/* What it looks like, then what it works, then how to do it. */}
-      <ExerciseStages
+      <MovementArt
+        exerciseId={exercise.id}
         pattern={exercise.pattern}
         equipment={exercise.equipment}
         style={styles.animation}
