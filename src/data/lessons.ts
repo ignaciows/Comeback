@@ -137,6 +137,32 @@ export const TRACKS: Track[] = [
         },
         source: 'Nedeltcheva et al. (2010); Craven et al. (2022)',
       },
+      {
+        id: 'muscle_ceiling',
+        title: 'There is a ceiling, and it drops every year',
+        takeaway: 'Your second year of training gives you roughly half of what your first one did.',
+        art: null,
+        cards: [
+          { text: 'An untrained beginner can add around 1 % of body weight in muscle a month.' },
+          {
+            text: 'A year in, that is halved. Several years in, halved again.',
+            note: 'Not a failure. The easy adaptations only happen once.',
+          },
+          { text: 'Eating more does not raise the ceiling. It just adds fat above it.' },
+          {
+            text: 'This is why the app promises less for year two than year one.',
+            note: 'A two-year plan that offered double the first year would be selling you something.',
+          },
+        ],
+        check: {
+          question: 'Year one gave you 6 kg of muscle. A realistic year two is…',
+          options: ['12 kg', 'Around 3 kg', '6 kg again', 'Nothing at all'],
+          answer: 1,
+          because:
+            'The rate roughly halves with each year of training age. Slower is not stalled — it is what year two looks like.',
+        },
+        source: 'Aragon & Schoenfeld rate model; Garthe et al. (2011)',
+      },
     ],
   },
   {
@@ -208,6 +234,33 @@ export const TRACKS: Track[] = [
         },
         source: 'Garthe et al. (2011); Aragon & Schoenfeld rate model',
       },
+      {
+        id: 'lean_bulk',
+        title: 'Bulking without getting fat',
+        takeaway: 'Past a small surplus, the extra food stops becoming muscle and starts becoming fat.',
+        art: null,
+        cards: [
+          { text: 'Muscle can only be built so fast. A surplus beyond that rate has nowhere to go.' },
+          {
+            text: 'Roughly 10–20 % above maintenance is the useful range.',
+            note: 'Above it you gain faster, but the extra is fat.',
+          },
+          { text: 'A "dirty bulk" is eating far past the ceiling and calling the fat progress.' },
+          {
+            text: 'The cost arrives later: a longer cut, and months not spent building.',
+            note: 'Two months of extra bulk can buy three months of cutting it back off.',
+          },
+          { text: 'A lean bulk is slower on the scale and roughly the same in muscle.' },
+        ],
+        check: {
+          question: 'You double your surplus. Muscle gain…',
+          options: ['Doubles', 'Barely changes; fat gain rises', 'Stops', 'Halves'],
+          answer: 1,
+          because:
+            'The rate muscle can be built at is the limit, not the calories. Past it the surplus is stored as fat.',
+        },
+        source: 'Garthe et al. (2013); Slater et al. (2019)',
+      },
     ],
   },
   {
@@ -278,6 +331,41 @@ export const TRACKS: Track[] = [
         },
         source: 'Schoenfeld, Ogborn & Krieger (2016)',
       },
+      {
+        id: 'what_warmup_is',
+        title: 'What a warm-up actually is',
+        takeaway: 'Move through the range you are about to load. Holding a stretch first costs you strength.',
+        art: null,
+        cards: [
+          { text: 'A warm-up is rehearsal and temperature, not flexibility work.' },
+          {
+            text: 'Holding a stretch before lifting reduces strength by around 5 %.',
+            note: 'The longer the hold, the bigger the loss.',
+          },
+          { text: 'Moving through the same range costs nothing and often helps.' },
+          {
+            text: 'So: general warm-up, then the joints this lift uses, then light sets of the lift.',
+            note: 'The app shows those middle two before each exercise.',
+          },
+          {
+            text: 'Save the long stretches for after, or a separate day.',
+            note: 'Nothing is wrong with them. They are just wrong here.',
+          },
+        ],
+        check: {
+          question: 'Two minutes of held hamstring stretches, then squats. Result?',
+          options: [
+            'Stronger squats',
+            'Slightly weaker squats',
+            'No effect either way',
+            'Fewer injuries, guaranteed',
+          ],
+          answer: 1,
+          because:
+            'Static stretching before lifting produces a small but measurable drop in force. Move through the range instead.',
+        },
+        source: 'Simic, Sarabon & Markovic (2013); Behm & Chaouachi (2011); Jeffreys (2007)',
+      },
     ],
   },
   {
@@ -347,6 +435,79 @@ export const TRACKS: Track[] = [
           because: 'A one-day jump is almost never fat. Give the trend two weeks to say something.',
         },
         source: 'Trexler et al. (2014) on measurement variability',
+      },
+      {
+        id: 'body_fat_percent',
+        title: 'What body fat percentage is',
+        takeaway: 'The share of your weight that is fat. It explains what the scale alone cannot.',
+        art: null,
+        cards: [
+          { text: 'Body fat percentage is fat mass divided by total weight.' },
+          {
+            text: '82 kg at 20 % and 82 kg at 12 % are different bodies at the same weight.',
+            note: 'Which is the whole reason the app tracks it.',
+          },
+          {
+            text: 'Roughly: 10–15 % is lean for a man, 20–25 % for a woman.',
+            note: 'Ranges differ by sex and are not goals. Very low is not healthier.',
+          },
+          {
+            text: 'Gym scales guess it from a current passed through your body.',
+            note: 'Hydration, food and time of day all move the reading.',
+          },
+          {
+            text: 'Those readings sit 3–4 points away from a proper scan, in either direction.',
+            note: 'So use one device, at one time of day, and read the trend — not the number.',
+          },
+        ],
+        check: {
+          question: 'Your gym scale says 18 % on Monday and 15 % on Friday. Most likely…',
+          options: [
+            'You lost 3 % of body fat',
+            'Measurement noise, not change',
+            'The first reading was a lie',
+            'You gained muscle',
+          ],
+          answer: 1,
+          because:
+            'Impedance readings move several points on hydration alone. Days apart, the difference is the instrument, not you.',
+        },
+        source: 'BIA vs DXA comparisons report mean absolute error around 3.4–3.9 % body fat',
+      },
+      {
+        id: 'recomp',
+        title: 'Building and losing at once',
+        takeaway: 'Recomposition is real at every level. What changes is how fast it is worth waiting for.',
+        art: null,
+        cards: [
+          { text: 'Gaining muscle while losing fat is possible without a surplus.' },
+          {
+            text: 'It is fastest for beginners, returners, and people carrying more fat.',
+            note: 'There is stored energy to build from and a lot of easy adaptation left.',
+          },
+          {
+            text: 'Trained lifters can do it too — the evidence is clear on that.',
+            note: 'The old line that it is impossible for them does not survive the research.',
+          },
+          {
+            text: 'But it is slow. Months to show what a dedicated phase does in weeks.',
+            note: 'So it is a bad plan when you have a deadline, not a myth.',
+          },
+          { text: 'It needs the two things every plan needs: progressive training and enough protein.' },
+        ],
+        check: {
+          question: 'Five years trained and lean. Can you recomp?',
+          options: [
+            'No, it is impossible',
+            'Yes, but slowly enough that a phase is usually better',
+            'Yes, as fast as a beginner',
+            'Only with supplements',
+          ],
+          answer: 1,
+          because:
+            'Trained individuals do recomp in the literature. The catch is the rate, which is why the app suggests it by situation rather than by belief.',
+        },
+        source: 'Barakat et al. (2020), Strength & Conditioning Journal 42(5):7–21',
       },
     ],
   },

@@ -112,6 +112,37 @@ describe('the material itself', () => {
     )).toBe(true);
   });
 
+  it('covers the five gaps the user actually named', () => {
+    // Requested by name, so a later reshuffle of the tracks cannot quietly
+    // drop one and leave the question unanswered again.
+    for (const id of ['body_fat_percent', 'lean_bulk', 'recomp', 'muscle_ceiling', 'what_warmup_is']) {
+      expect(ALL_LESSONS.some((entry) => entry.lesson.id === id), id).toBe(true);
+    }
+  });
+
+  it('says what the warm-up lesson and the warm-up code both say', () => {
+    // Same guard as the volume and protein numbers: the app must not teach one
+    // rule on the learning screen and apply another before the first set.
+    const lesson = ALL_LESSONS.find((entry) => entry.lesson.id === 'what_warmup_is')!.lesson;
+    const principle = TRAINING_PRINCIPLES.find((entry) => entry.id === 'specific_warmup')!;
+
+    expect(lesson.takeaway).toMatch(/hold/i);
+    expect(principle.detail).toMatch(/5 %/);
+    expect(lesson.cards.some((card) => /5 %/.test(`${card.text} ${card.note ?? ''}`))).toBe(true);
+  });
+
+  it('does not call recomposition a myth for trained lifters', () => {
+    // The brief asked for "when it is smoke". The review it would have to cite
+    // says the opposite — trained individuals do recomp, just slowly — so the
+    // lesson teaches the rate rather than an impossibility that is not real.
+    const lesson = ALL_LESSONS.find((entry) => entry.lesson.id === 'recomp')!.lesson;
+    const prose = [lesson.takeaway, ...lesson.cards.map((card) => card.text)].join(' ');
+
+    expect(prose).not.toMatch(/impossible|a myth|cannot happen/i);
+    expect(prose).toMatch(/slow/i);
+    expect(lesson.source).toMatch(/Barakat/);
+  });
+
   it('never blames the reader', () => {
     // Same rule the rest of the copy follows: second-person blame is out.
     const scolding = /you (should have|failed|didn't bother|are lazy|never)|you're not trying/i;
