@@ -300,12 +300,23 @@ type Actions = {
     identity?: { routeId: string; name: string; reason: string },
   ) => void;
   advanceRouteBlock: (strategy: NutritionStrategy) => void;
+  /**
+   * The single door every plan lever goes through.
+   *
+   * The optional fields are the ones `/plan/variables` owns. Left out, they
+   * keep their current value — which is what the older callers, that only ever
+   * moved objective and pace, rely on.
+   */
   applyPlanIntent: (intent: {
     objective: PlanObjective;
     speed: PlanSpeed;
     fatTolerance: FatTolerance;
     targetWeightKg?: number | null;
     horizonWeeks?: number;
+    maxBodyFatPercent?: number | null;
+    muscleFocus?: MuscleGroup[];
+    daysPerWeek?: number;
+    sessionMinutes?: number;
   }) => void;
   /** Writes an import from a health source into the store. */
   applyHealthSync: (result: {
@@ -1270,7 +1281,17 @@ export const useAppStore = create<Store>()(
        * and how fast; frequency, strategy and schedule are derived here and
        * written in one go, with the previous phase closed rather than deleted.
        */
-      applyPlanIntent: ({ objective, speed, fatTolerance, targetWeightKg, horizonWeeks }) => {
+      applyPlanIntent: ({
+        objective,
+        speed,
+        fatTolerance,
+        targetWeightKg,
+        horizonWeeks,
+        maxBodyFatPercent,
+        muscleFocus,
+        daysPerWeek,
+        sessionMinutes,
+      }) => {
         const state = get();
         if (!state.profile) return;
 
@@ -1336,19 +1357,47 @@ export const useAppStore = create<Store>()(
                 strategy: simulation.strategy,
                 targetWeightKg: targetWeightKg ?? state.goal.targetWeightKg,
                 horizonWeeks: horizonWeeks ?? state.goal.horizonWeeks,
+                maxBodyFatPercent:
+                  maxBodyFatPercent === undefined ? state.goal.maxBodyFatPercent : maxBodyFatPercent,
+                muscleFocus: muscleFocus ?? state.goal.muscleFocus,
                 updatedAt: timestamp,
               }
             : state.goal,
         }));
 
-        // Frequency is an output of the pace, so the schedule follows it.
-        if (simulation.daysPerWeek !== state.training.preferredDaysPerWeek) {
+        /*
+          Frequency is normally an output of the pace. When the user sets it
+          explicitly on the variables screen it wins, because the point of that
+          screen is that a lever you moved does what you moved it to — deriving
+          over the top of it would be the app quietly disagreeing.
+        */
+        const targetDays = daysPerWeek ?? simulation.daysPerWeek;
+        const scheduleChanged =
+          targetDays !== state.training.preferredDaysPerWeek ||
+          (sessionMinutes !== undefined && sessionMinutes !== state.training.sessionMinutes);
+
+        if (scheduleChanged) {
           get().updateTraining({
-            preferredDaysPerWeek: simulation.daysPerWeek,
-            minDaysPerWeek: Math.max(2, simulation.daysPerWeek - 1),
-            preferredWeekdays: WEEKDAYS_FOR[simulation.daysPerWeek] ?? state.training.preferredWeekdays,
+            preferredDaysPerWeek: targetDays,
+            minDaysPerWeek: Math.max(2, targetDays - 1),
+            preferredWeekdays: WEEKDAYS_FOR[targetDays] ?? state.training.preferredWeekdays,
+            ...(sessionMinutes === undefined ? {} : { sessionMinutes }),
           });
         }
+
+        /*
+          The routine is what the days are filled with, so anything that
+          changes its shape has to rebuild it — otherwise the plan says four
+          days of chest-focused work and the routine still holds last week's
+          three balanced ones. This is the half that used to be missing when a
+          lever was changed somewhere other than `/focus`.
+        */
+        const focusChanged =
+          muscleFocus !== undefined &&
+          (muscleFocus.length !== (state.goal?.muscleFocus.length ?? 0) ||
+            muscleFocus.some((muscle, index) => muscle !== state.goal?.muscleFocus[index]));
+
+        if (focusChanged || scheduleChanged) get().regenerateRoutine();
       },
 
       /**

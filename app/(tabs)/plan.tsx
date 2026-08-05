@@ -294,6 +294,16 @@ export default function PlanTab() {
       <Reveal index={8}>
         <Section title="Change it">
           <NavGroup style={styles.group}>
+            {/* One door for every lever. The rows below it are the shortcuts
+                people already know, not competing places to set the same
+                thing. */}
+            <NavRow
+              label="All plan variables"
+              icon="plan"
+              tone="accent"
+              detail="Goal, pace, fat ceiling, days, focus, duration — all in one place"
+              onPress={() => router.push('/plan/variables')}
+            />
             <NavRow label="Change the plan" icon="target" onPress={() => router.push('/adjust')} />
             {planHistory.length > 0 ? (
               <NavRow

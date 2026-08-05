@@ -790,6 +790,70 @@ describe('main flow', () => {
     expect(engine.routeProgress?.routeName).toBe('Never past 17 %');
   });
 
+  it('recalculates everything downstream when a plan variable moves', () => {
+    /*
+      The bug this closes: some levers wrote a field and left the projections
+      stale until something else happened to rebuild them, and the user had no
+      way to tell which ones. Every lever now goes through applyPlanIntent, so
+      focus, days and session length all have to land *and* rebuild the
+      routine — the plan saying four chest-focused days while the routine still
+      holds last week's three balanced ones is the failure being prevented.
+    */
+    useAppStore.getState().seedDeveloperProfile();
+    const before = useAppStore.getState();
+    const routineBefore = before.routines.find((entry) => entry.id === before.activeRoutineId);
+
+    useAppStore.getState().applyPlanIntent({
+      objective: before.goal!.objective,
+      speed: before.goal!.speed,
+      fatTolerance: before.goal!.fatTolerance,
+      maxBodyFatPercent: 17,
+      muscleFocus: ['chest'],
+      daysPerWeek: 5,
+      sessionMinutes: 75,
+      horizonWeeks: 52,
+    });
+
+    const after = useAppStore.getState();
+    expect(after.goal?.maxBodyFatPercent).toBe(17);
+    expect(after.goal?.muscleFocus).toEqual(['chest']);
+    expect(after.goal?.horizonWeeks).toBe(52);
+    // An explicit day count wins over the one the pace would have derived.
+    expect(after.training.preferredDaysPerWeek).toBe(5);
+    expect(after.training.sessionMinutes).toBe(75);
+
+    const routineAfter = after.routines.find((entry) => entry.id === after.activeRoutineId);
+    expect(routineAfter?.daysPerWeek).toBe(5);
+    expect(routineAfter?.id).not.toBe(routineBefore?.id);
+
+    // And there is a way back, as with every other plan change.
+    expect(after.planHistory.length).toBeGreaterThan(before.planHistory.length);
+  });
+
+  it('leaves untouched levers alone when only one moves', () => {
+    // The older callers pass objective and pace only, and must not have the
+    // ceiling or the focus wiped out from under them.
+    useAppStore.getState().seedDeveloperProfile();
+    useAppStore.getState().applyPlanIntent({
+      objective: 'build',
+      speed: 'steady',
+      fatTolerance: 'some',
+      maxBodyFatPercent: 20,
+      muscleFocus: ['back'],
+    });
+
+    useAppStore.getState().applyPlanIntent({
+      objective: 'build',
+      speed: 'fast',
+      fatTolerance: 'some',
+    });
+
+    const state = useAppStore.getState();
+    expect(state.goal?.speed).toBe('fast');
+    expect(state.goal?.maxBodyFatPercent).toBe(20);
+    expect(state.goal?.muscleFocus).toEqual(['back']);
+  });
+
   it('produces a usable state from the development seed', () => {
     useAppStore.getState().seedDeveloperProfile();
     const state = useAppStore.getState();
