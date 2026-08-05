@@ -31,7 +31,9 @@ import { ExerciseStages } from '@/features/training/ExerciseStages';
 import { ExercisePicker } from '@/features/training/ExercisePicker';
 import { LevelTrack } from '@/features/training/LevelTrack';
 import { Stepper } from '@/features/training/Stepper';
+import { WarmupBrief } from '@/features/training/WarmupBrief';
 import { WorkoutFooter } from '@/features/training/WorkoutFooter';
+import { hasWarmup } from '@/domain/training/warmup';
 import { BottomSheet } from '@/components/BottomSheet';
 import { useSession } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
@@ -105,6 +107,14 @@ export default function GuidedScreen() {
    * which reads as the app congratulating you for the wrong thing.
    */
   const [cleared, setCleared] = useState<{ exerciseId: string; caption: string } | null>(null);
+
+  /**
+   * Which exercises have already had their warm-up screen this session, by
+   * workout-exercise id rather than exercise id — the same movement can
+   * legitimately appear twice in one session, and the second time round you
+   * are already warm.
+   */
+  const [warmedUp, setWarmedUp] = useState<string[]>([]);
 
   const clear = useSharedValue(0);
   const clearStyle = useAnimatedStyle(() => ({
@@ -424,6 +434,39 @@ export default function GuidedScreen() {
             />
           </View>
         </View>
+      </Screen>
+    );
+  }
+
+  // ---- Before the first set of a movement ---------------------------------
+  /*
+    The general warm-up got your temperature up and the ramp sets rehearse the
+    pattern under load. Neither covers the middle: before a bench press you
+    need to move shoulders, not ankles. Shown once per exercise, only when
+    nothing in it has been logged yet, and skippable — a screen you cannot get
+    past is one people learn to dread by the third exercise.
+  */
+  const needsWarmup =
+    !warmedUp.includes(current.exercise.id) &&
+    !current.exercise.sets.some((entry) => entry.completed) &&
+    hasWarmup(current.exercise.exerciseId);
+
+  if (needsWarmup) {
+    const acknowledge = () => setWarmedUp((entries) => [...entries, current.exercise.id]);
+    return (
+      <Screen bottomInset={spacing.xxl}>
+        <SessionBarTop session={session} progress={progress} onClose={() => router.back()} />
+
+        <WarmupBrief
+          exerciseId={current.exercise.exerciseId}
+          onReady={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            acknowledge();
+          }}
+          onSkip={acknowledge}
+        />
+
+        {levels ? <WorkoutFooter levels={levels} /> : null}
       </Screen>
     );
   }

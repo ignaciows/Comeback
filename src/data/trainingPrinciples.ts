@@ -90,6 +90,15 @@ export const TRAINING_PRINCIPLES: Principle[] = [
     source: 'ACSM position stand (2009); standard warm-up practice',
   },
   {
+    id: 'specific_warmup',
+    title: 'Move the joints this lift uses, and do not hold a stretch',
+    application:
+      'Each exercise opens with two to four movements chosen for that lift — shoulders before a press, hips and ankles before a squat. Skippable, and isolation work gets none.',
+    detail:
+      'Held static stretching before lifting reduces strength by roughly 5 % and power by about 2 %, and the deficit grows the longer the hold. Moving through the range instead shows no such cost. Note that "activation" drills raising muscle activity in the sets afterwards is not established — these are here for range and rehearsal.',
+    source: 'Simic, Sarabon & Markovic (2013); Behm & Chaouachi (2011); Jeffreys (2007), RAMP',
+  },
+  {
     id: 'protein',
     title: '1.6–2.2 g of protein per kg of body weight',
     application: 'The protein target is set from your body weight and rises during a cut.',
