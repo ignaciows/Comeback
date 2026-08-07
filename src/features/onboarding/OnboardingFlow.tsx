@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { ActionBar, PrimaryButton, TextButton } from '@/components/Button';
 import { Note, StatusPill } from '@/components/Feedback';
@@ -13,15 +13,18 @@ import { Divider, Section } from '@/components/Section';
 import { Label, Text } from '@/design-system/Text';
 import { borderWidth, colors, opacity, radius, spacing } from '@/design-system/tokens';
 import { buildInitialRoutine, estimateRoutineDayMinutes } from '@/data/routineTemplates';
+import { analyseComposition, bodyShape, frameSize, type BodyInput } from '@/domain/body/composition';
 import {
   OBJECTIVE_LABELS,
   SPEEDS,
   SPEED_LABELS,
+  distinctPaces,
   simulatePlan,
   suggestTargetWeight,
   type SimulationInput,
 } from '@/domain/plan/simulate';
 import type { FatTolerance, GoalType, PlanObjective, PlanSpeed } from '@/domain/types';
+import { BodyRender } from '@/features/body/BodyRender';
 import { MilestoneTrack } from '@/features/plan/MilestoneTrack';
 import { useAppStore, WEEKDAYS_FOR, type OnboardingPayload } from '@/store/useAppStore';
 import { formatLongDate, today } from '@/utils/date';
@@ -31,9 +34,23 @@ import { fieldErrors, quickStartSchema } from './schema';
  * Three questions, then the plan.
  *
  * The app never asks how many days a week you can train or what to eat — those
- * are consequences of what you want and how fast, so it works them out. The
- * pace screen shows each option's result before you pick it, so the decision is
- * made with the numbers already in front of you.
+ * are consequences of what you want and how fast, so it works them out.
+ *
+ * You type two numbers and a body appears: that is you, drawn from what you
+ * just entered, and it is the first thing in the flow that is a picture rather
+ * than a sentence.
+ *
+ * It stops there deliberately. The obvious next move was to draw the body each
+ * pace leads to and let people choose by looking — that was built, rendered,
+ * and thrown away, because twelve weeks of difference between a gentle pace and
+ * a hard one does not survive being drawn as a silhouette. All four came out
+ * the same figure. What does show is the *split*: the fast paces put on more
+ * weight and much more of it is fat, so each option carries a two-part bar
+ * instead. That is the decision actually being made here.
+ *
+ * The pace no longer advances the moment it is tapped, either. A screen whose
+ * job is to let you compare options cannot also close itself on the first one
+ * you touch.
  */
 
 const OBJECTIVES: { value: PlanObjective; goalType: GoalType; label: string; detail: string }[] = [
@@ -66,7 +83,9 @@ export function OnboardingFlow() {
   const [objective, setObjective] = useState<PlanObjective | null>(null);
   const [weightKg, setWeightKg] = useState<number | null>(null);
   const [heightCm, setHeightCm] = useState<number | null>(null);
-  const [speed, setSpeed] = useState<PlanSpeed | null>(null);
+  // Starts on the middle pace so the preview has something to draw. An empty
+  // screen teaches nobody what the screen is for.
+  const [speed, setSpeed] = useState<PlanSpeed | null>('steady');
   const [targetWeightKg, setTargetWeightKg] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,13 +109,19 @@ export function OnboardingFlow() {
     };
   }, [objective, weightKg, heightCm]);
 
-  /** Every pace, simulated, so the choice is made with the result visible. */
+  /**
+   * Every pace, simulated, then narrowed to the ones that differ. Two speeds
+   * that land on the same body are one choice, and printing it twice only
+   * sends someone hunting for a difference the model does not have.
+   */
   const options = useMemo(() => {
     if (!baseInput) return [];
-    return SPEEDS.map((value) => ({
-      speed: value,
-      result: simulatePlan({ ...baseInput, speed: value, targetWeightKg: null }),
-    }));
+    return distinctPaces(
+      SPEEDS.map((value) => ({
+        speed: value,
+        result: simulatePlan({ ...baseInput, speed: value, targetWeightKg: null }),
+      })),
+    );
   }, [baseInput]);
 
   const chosen = useMemo(() => {
@@ -104,6 +129,34 @@ export function OnboardingFlow() {
     const target = targetWeightKg ?? suggestTargetWeight({ ...baseInput, speed });
     return { target, result: simulatePlan({ ...baseInput, speed, targetWeightKg: target }) };
   }, [baseInput, speed, targetWeightKg]);
+
+  /**
+   * You, drawn from the two numbers you just typed.
+   *
+   * Body fat is not asked for and not guessed at by the user — the model
+   * assumes it from height and weight, and says so on the caption. It is a
+   * proportion sketch, not a portrait, and it exists so that entering 82 kg
+   * produces something other than the word "82".
+   */
+  const you = useMemo(() => {
+    // Only once both numbers are inside believable bounds. Half-typed input
+    // ("8" on the way to "82") would otherwise draw a body nobody has, and a
+    // picture that flickers through nonsense is worse than no picture.
+    if (!quickStartSchema.pick({ weightKg: true, heightCm: true }).safeParse({ weightKg, heightCm }).success) {
+      return null;
+    }
+    if (weightKg === null || heightCm === null) return null;
+    const input: BodyInput = {
+      heightCm,
+      weightKg,
+      bodyFatPercent: null,
+      sex: 'unspecified',
+      wristCm: null,
+      experience: DEFAULTS.experience,
+    };
+    const frame = frameSize(heightCm, null);
+    return { input, frame, shape: bodyShape(analyseComposition(input), frame) };
+  }, [weightKg, heightCm]);
 
   const routine = useMemo(() => {
     if (!objective || !chosen) return null;
@@ -159,15 +212,20 @@ export function OnboardingFlow() {
 
   return (
     <Screen ambient>
-      <View style={styles.progress}>
-        {[0, 1, 2, 3].map((index) => (
-          <View key={index} style={[styles.progressStep, index <= step && styles.progressStepDone]} />
-        ))}
-      </View>
+      {/* Three questions. The summary is the answer, not a fourth thing to
+          get through, so it does not get a segment — and the bar no longer
+          says "step 3 of 3" with a screen still to come. */}
+      {step < 3 ? (
+        <View style={styles.progress}>
+          {[0, 1, 2].map((index) => (
+            <View key={index} style={[styles.progressStep, index <= step && styles.progressStepDone]} />
+          ))}
+        </View>
+      ) : null}
 
       {step === 0 && (
         <Reveal>
-          <Label style={styles.kicker}>Comeback</Label>
+          <Label style={styles.kicker}>Question 1 of 3</Label>
           <Text variant="title" style={styles.question}>
             What do you want?
           </Text>
@@ -201,7 +259,7 @@ export function OnboardingFlow() {
 
       {step === 1 && (
         <Reveal>
-          <Label style={styles.kicker}>Step 2 of 3</Label>
+          <Label style={styles.kicker}>Question 2 of 3</Label>
           <Text variant="title" style={styles.question}>
             Where are you starting?
           </Text>
@@ -226,6 +284,21 @@ export function OnboardingFlow() {
               placeholder="186"
             />
           </View>
+          {/* The moment two numbers become a person. Nothing here is asked
+              for twice — the drawing is made entirely of what is already on
+              screen, which is exactly why it is worth showing. */}
+          {you ? (
+            <Reveal>
+              <View style={styles.you}>
+                <BodyRender shape={you.shape} height={200} caption="You, roughly" />
+                <Text variant="caption" tone="tertiary" style={styles.youNote}>
+                  Proportions estimated from your height and weight. It gets more accurate as you log
+                  sessions, and you can measure yourself properly later.
+                </Text>
+              </View>
+            </Reveal>
+          ) : null}
+
           {error ? (
             <Text variant="caption" tone="danger" style={styles.error}>
               {error}
@@ -253,13 +326,14 @@ export function OnboardingFlow() {
 
       {step === 2 && (
         <Reveal>
-          <Label style={styles.kicker}>Step 3 of 3</Label>
+          <Label style={styles.kicker}>Question 3 of 3</Label>
           <Text variant="title" style={styles.question}>
             How fast do you want it?
           </Text>
           <Text variant="bodySmall" tone="secondary" style={styles.subtitle}>
             {`What each pace gets you in ${DEFAULTS.horizonWeeks} weeks, and what it asks for.`}
           </Text>
+
           <View style={styles.options}>
             {options.map((option, index) => {
               const change = option.result.outcome.weightChangeKg;
@@ -270,7 +344,6 @@ export function OnboardingFlow() {
                     onPress={() => {
                       Haptics.selectionAsync();
                       setSpeed(option.speed);
-                      setTimeout(() => advance(3), 140);
                     }}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: speed === option.speed }}
@@ -293,11 +366,11 @@ export function OnboardingFlow() {
                         {`${gaining ? '+' : ''}${change} kg`}
                       </Text>
                     </View>
-                    <Text variant="bodySmall" tone="secondary" style={styles.cardLine}>
-                      {gaining
-                        ? `${Math.abs(option.result.outcome.leanChangeKg)} kg lean · ${Math.abs(option.result.outcome.fatChangeKg)} kg fat`
-                        : `${Math.abs(option.result.outcome.fatChangeKg)} kg fat · ${Math.abs(option.result.outcome.leanChangeKg)} kg lean`}
-                    </Text>
+                    <SplitBar
+                      leanKg={option.result.outcome.leanChangeKg}
+                      fatKg={option.result.outcome.fatChangeKg}
+                      style={styles.cardLine}
+                    />
                     <View style={styles.cardFoot}>
                       <Text variant="caption" tone="tertiary">
                         {`${option.result.daysPerWeek} days a week · ${option.result.macros.kcal} kcal`}
@@ -311,7 +384,10 @@ export function OnboardingFlow() {
               );
             })}
           </View>
-          <TextButton label="Back" onPress={() => advance(1)} style={styles.back} />
+          <ActionBar>
+            <PrimaryButton label="Continue" onPress={() => advance(3)} disabled={!speed} />
+            <TextButton label="Back" onPress={() => advance(1)} style={styles.back} />
+          </ActionBar>
         </Reveal>
       )}
 
@@ -388,6 +464,45 @@ export function OnboardingFlow() {
   );
 }
 
+/**
+ * Muscle against fat, as one bar.
+ *
+ * The first version of this screen offered to draw the body each pace leads to,
+ * side by side with the body you have now. Rendered, all four came out as the
+ * same figure: twelve weeks of difference between a cautious pace and a hard
+ * one is real, but it is not a difference a silhouette can carry, and four
+ * near-identical drawings promise a distinction the picture cannot deliver.
+ *
+ * What *is* visible is the split. The fast paces put on more weight and a much
+ * larger share of it is fat, and that is the entire decision being made on this
+ * screen. One bar, two segments, widths in proportion — nobody has to hold
+ * "1.7 kg lean, 3.2 kg fat" in their head to see that one of these is mostly
+ * fat and the other is not.
+ */
+function SplitBar({ leanKg, fatKg, style }: { leanKg: number; fatKg: number; style?: ViewStyle }) {
+  const lean = Math.abs(leanKg);
+  const fat = Math.abs(fatKg);
+  const total = lean + fat;
+  if (total === 0) return null;
+
+  return (
+    <View style={style}>
+      <View style={styles.split}>
+        <View style={[styles.splitPart, { flex: lean, backgroundColor: colors.accent }]} />
+        <View style={[styles.splitPart, { flex: fat, backgroundColor: colors.warning }]} />
+      </View>
+      <View style={styles.splitKey}>
+        <Text variant="caption" tone="tertiary">
+          {`${lean.toFixed(1)} kg muscle`}
+        </Text>
+        <Text variant="caption" tone="tertiary">
+          {`${fat.toFixed(1)} kg fat`}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   progress: {
     flexDirection: 'row',
@@ -443,6 +558,29 @@ const styles = StyleSheet.create({
   },
   fields: {
     marginTop: spacing.lg,
+  },
+  you: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+  },
+  youNote: {
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  split: {
+    flexDirection: 'row',
+    gap: 2,
+    height: 8,
+    borderRadius: radius.sm,
+    overflow: 'hidden',
+  },
+  splitPart: {
+    height: '100%',
+  },
+  splitKey: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
   },
   field: {
     marginBottom: spacing.lg,

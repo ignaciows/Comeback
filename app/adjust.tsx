@@ -22,6 +22,7 @@ import {
   SPEEDS,
   SPEED_LABELS,
   compareSpeeds,
+  distinctPaces,
   simulatePlan,
   suggestTargetWeight,
   type SimulationInput,
@@ -83,7 +84,10 @@ export default function AdjustPlanScreen() {
   }, [profile, latestWeight, objective, speed, fatTolerance, targetWeightKg, horizonWeeks, engine, goal]);
 
   const simulation = useMemo(() => (input ? simulatePlan(input) : null), [input]);
-  const speedOptions = useMemo(() => (input ? compareSpeeds(input) : []), [input]);
+  // Narrowed to the paces that actually differ: two speeds that reach the
+  // same body are one row, not two, and a comparison table whose whole job is
+  // to show differences has no business repeating itself.
+  const speedOptions = useMemo(() => (input ? distinctPaces(compareSpeeds(input)) : []), [input]);
 
   if (!profile || latestWeight === null || !simulation || !input) {
     return (

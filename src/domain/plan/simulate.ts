@@ -297,6 +297,38 @@ export function compareSpeeds(input: SimulationInput): SpeedOption[] {
 }
 
 /**
+ * The paces that are actually different from each other.
+ *
+ * There are four speeds, and depending on the objective two or three of them
+ * land on the same body. Building at "cautious" and at "steady" both come out
+ * at +2.5 kg, 1.4 of it lean; at "recomp" they agree on the calories and the
+ * days as well, which is to say they are the same option printed twice. A
+ * screen that offers four choices where two are identical is not offering
+ * choice, it is asking someone to find a difference that is not there — and
+ * they will look, because you put it in front of them.
+ *
+ * Where two paces reach the same outcome, the gentler one wins. Same result,
+ * fewer sessions a week demanded, so there is no version of this where the
+ * harder one is the better offer.
+ *
+ * This is presentation, not physiology: nothing here changes what any pace
+ * does, it only stops the app from claiming a distinction it cannot back.
+ */
+export function distinctPaces<T extends { speed: PlanSpeed; result: SimulationResult }>(options: T[]): T[] {
+  const seen = new Map<string, T>();
+
+  // SPEEDS is ordered gentlest first, so the first arrival at any outcome is
+  // already the one that asks for least.
+  for (const option of options) {
+    const { weightChangeKg, leanChangeKg, fatChangeKg } = option.result.outcome;
+    const key = `${weightChangeKg}|${leanChangeKg}|${fatChangeKg}`;
+    if (!seen.has(key)) seen.set(key, option);
+  }
+
+  return [...seen.values()];
+}
+
+/**
  * A target weight that matches the intent, so the user never has to invent one.
  * Building adds what training can plausibly support; leaning aims at a sane
  * amount of fat loss over the horizon.

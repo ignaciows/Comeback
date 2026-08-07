@@ -101,7 +101,13 @@ function armLine(shape: BodyShape, side: -1 | 1): { d: string; width: number } {
   const cx = 50;
   const width = shape.armThickness;
   const topX = cx + side * (shape.shoulderWidth / 2 - width * 0.3);
-  const bottomX = cx + side * (shape.shoulderWidth / 2 + 1.5);
+  // Splayed by a share of the arm's own thickness rather than a flat 1.5.
+  // A constant offset is swallowed by a thick arm: on a heavier figure the
+  // arm's inner edge landed within a millimetre of the waistline, so the gap
+  // this function exists to create never appeared and every body — lean or
+  // heavy — drew with the same straight outer edge. Scaling the splay keeps
+  // the gap open at every size, which is what makes the taper visible at all.
+  const bottomX = cx + side * (shape.shoulderWidth / 2 + width * 0.55);
 
   return { d: `M${topX} 50L${bottomX} 116`, width };
 }
