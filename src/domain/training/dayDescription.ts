@@ -21,6 +21,8 @@ export type DayDescription = {
   plain: string;
   /** Muscles trained, most-worked first. */
   groups: MuscleGroup[];
+  /** Weekly sets each muscle gets in this day, for shading a figure. */
+  setsByMuscle: Partial<Record<MuscleGroup, number>>;
   exercises: number;
   sets: number;
 };
@@ -49,6 +51,7 @@ export function describeDay(day: RoutineDay): DayDescription {
 
   return {
     groups: ranked,
+    setsByMuscle: Object.fromEntries(setsPerMuscle),
     muscles: listOf(ranked.map((muscle) => MUSCLE_GROUP_LABELS[muscle].toLowerCase())),
     plain: plainSentence(ranked, day.exercises.length, totalSets),
     exercises: day.exercises.length,

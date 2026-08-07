@@ -1,45 +1,85 @@
 import { useRouter } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 
 import { Reveal } from '@/components/motion/Reveal';
 import { NavGroup, NavRow } from '@/components/NavRow';
+import { ProgressBar } from '@/components/ProgressBar';
 import { Screen } from '@/components/Screen';
 import { Label, Text } from '@/design-system/Text';
-import { spacing } from '@/design-system/tokens';
-import { strategyProfile } from '@/domain/plan/strategies';
-import { useActiveRoutine, useBodyWeightSeries } from '@/store/hooks';
+import { borderWidth, colors, radius, spacing } from '@/design-system/tokens';
+import { useBodyWeightSeries, useNextStep } from '@/store/hooks';
 import { useAppStore } from '@/store/useAppStore';
 
 /**
- * Rows only, each with its own glyph.
+ * You: the handful of facts the plan is built out of.
  *
- * A column of six identical text rows is a wall you read top to bottom; the
- * same six with a symbol each is something you find your place in. Detail
- * lines are used only where the label genuinely does not answer the row.
+ * This tab used to carry the plan, the routine and the plan comparison as
+ * well, which put three routes to the same places in two different tabs. Those
+ * belong where the plan lives. What is left here is only what is true about
+ * *you* — your name, your weight, your gym, the days you can train — plus the
+ * app's own drawers at the bottom.
+ *
+ * When the setup is unfinished the bar at the top says so with a number and a
+ * single next step, because "you are three quarters of the way there" is a
+ * reason to finish and a list of missing fields is a reason to close the app.
  */
 export default function ProfileScreen() {
   const router = useRouter();
   const profile = useAppStore((state) => state.profile);
-  const goal = useAppStore((state) => state.goal);
   const training = useAppStore((state) => state.training);
   const gyms = useAppStore((state) => state.gyms);
-  const routine = useActiveRoutine();
   const weights = useBodyWeightSeries();
+  const { setup, progress } = useNextStep();
 
   const gym = gyms.find((entry) => entry.id === training.gymId) ?? gyms[0] ?? null;
   const latest = weights[weights.length - 1] ?? null;
+  const next = setup[0] ?? null;
 
   return (
     <Screen>
       <Reveal index={0}>
-        <Text variant="title" style={styles.title}>
-          Profile
-        </Text>
+        <View style={styles.identity}>
+          <Text variant="title">{profile?.name || 'You'}</Text>
+          <Text variant="body" tone="secondary" style={styles.identityLine}>
+            {latest
+              ? `${latest.weightKg.toFixed(1)} kg${profile?.heightCm ? ` · ${profile.heightCm} cm` : ''}`
+              : 'No weight logged yet'}
+          </Text>
+        </View>
       </Reveal>
 
-      <Reveal index={1}>
+      {next ? (
+        <Reveal index={1}>
+          <View style={styles.setup}>
+            <View style={styles.setupHead}>
+              <Label>Setting up</Label>
+              <Text variant="caption" tone="tertiary" mono>
+                {`${Math.round(progress * 100)}%`}
+              </Text>
+            </View>
+            <ProgressBar value={progress} style={styles.setupBar} />
+            <NavRow label={next.label} icon={next.icon} detail={next.why} tone="accent" onPress={() => router.push(next.route)} />
+          </View>
+        </Reveal>
+      ) : null}
+
+      <Reveal index={2}>
         <NavGroup>
-          {/* Until a gym is set the app is guessing at the equipment, so this
-              sits first and marks itself until it is answered. */}
+          <NavRow
+            label="Your details"
+            icon="body"
+            value={profile?.name || 'Set them'}
+            detail="Name, height, birthday"
+            onPress={() => router.push('/you')}
+          />
+          <NavRow
+            label="Your weight"
+            icon="progress"
+            value={latest ? `${latest.weightKg.toFixed(1)} kg` : 'Log it'}
+            tone={latest ? 'neutral' : 'accent'}
+            dot={!latest}
+            onPress={() => router.push('/log-weight')}
+          />
           <NavRow
             label="Your gym"
             icon="gym"
@@ -50,52 +90,58 @@ export default function ProfileScreen() {
             onPress={() => router.push(gym ? '/gym' : '/gyms')}
           />
           <NavRow
-            label="You"
-            icon="body"
-            value={profile?.name || 'Set your name'}
-            detail={latest ? `${latest.weightKg.toFixed(1)} kg · ${profile?.heightCm ?? '—'} cm` : undefined}
-            onPress={() => router.push('/you')}
-          />
-          <NavRow
-            label="Plan"
-            icon="target"
-            value={goal ? strategyProfile(goal.strategy).label : '—'}
-            onPress={() => router.push('/adjust')}
-          />
-          <NavRow label="Compare plans" icon="progress" onPress={() => router.push('/routes')} />
-          <NavRow
-            label="Schedule"
+            label="The days you train"
             icon="calendar"
-            value={`${training.preferredDaysPerWeek} days`}
+            value={`${training.preferredDaysPerWeek} a week`}
             onPress={() => router.push('/schedule')}
           />
           <NavRow
-            label="Routine"
-            icon="train"
-            value={routine ? `${routine.days.length} days` : '—'}
-            onPress={() => router.push('/routine')}
+            label="Your body"
+            icon="body"
+            detail="Now, and at the end of each phase"
+            onPress={() => router.push('/body-shape')}
           />
         </NavGroup>
       </Reveal>
 
-      <Label style={styles.label}>App</Label>
-      <Reveal index={2}>
+      <Label style={styles.label}>The app</Label>
+      <Reveal index={3}>
         <NavGroup>
-          <NavRow label="Method" icon="method" onPress={() => router.push('/method')} />
-          <NavRow label="Data sources" icon="sources" value="Manual" onPress={() => router.push('/sources')} />
-          <NavRow label="Your data" icon="trash" onPress={() => router.push('/data')} />
+          <NavRow label="How it works" icon="method" onPress={() => router.push('/method')} />
+          <NavRow label="Where the numbers come from" icon="sources" onPress={() => router.push('/sources')} />
+          <NavRow label="Your data" icon="trash" detail="Export or delete everything" onPress={() => router.push('/data')} />
         </NavGroup>
       </Reveal>
     </Screen>
   );
 }
 
-const styles = {
-  title: {
+const styles = StyleSheet.create({
+  identity: {
     marginBottom: spacing.xl,
+  },
+  identityLine: {
+    marginTop: spacing.xs,
+  },
+  setup: {
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    paddingBottom: 0,
+    borderRadius: radius.lg,
+    borderWidth: borderWidth.hairline,
+    borderColor: colors.accentMuted,
+    backgroundColor: colors.accentSurface,
+  },
+  setupHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  setupBar: {
+    marginTop: spacing.sm,
   },
   label: {
     marginTop: spacing.xxl,
     marginBottom: spacing.md,
   },
-} as const;
+});

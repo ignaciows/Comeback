@@ -147,7 +147,11 @@ export default function AdjustPlanScreen() {
       {/* 3. Only asked when it changes anything. */}
       {objective !== 'lean' ? (
         <Reveal index={2}>
-          <Section title="Fat you will accept">
+          <Section
+            title="Fat you will accept"
+            action={{ label: 'Set a hard limit', onPress: () => router.push('/fat-ceiling') }}
+            footnote="A hard limit stops a building phase before it goes past the body fat you are willing to carry."
+          >
             <SegmentedControl
               options={(Object.keys(FAT_TOLERANCE_LABELS) as FatTolerance[]).map((value) => ({
                 value,
